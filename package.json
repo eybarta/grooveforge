@@ -27,6 +27,7 @@
     "zustand": "^5.0.16"
   },
   "devDependencies": {
+    "@types/node": "^22.20.5",
     "@types/react": "~19.3.0",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~58.0.4",
@@ -40,7 +41,9 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:wasm": "./scripts/build-wasm.sh",
+    "test:engine": "cmake -S engine -B engine/build && cmake --build engine/build && ctest --test-dir engine/build --output-on-failure"
   },
   "private": true
 }
