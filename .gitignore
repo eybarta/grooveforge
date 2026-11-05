@@ -1,0 +1,9 @@
+node_modules
+dist
+.output
+.vinxi
+.tanstack
+screenshots
+.env
+.env.*
+*.log
