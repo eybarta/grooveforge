@@ -1,3 +1,4 @@
+import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { alignTake } from "@/audio/latency";
@@ -21,6 +22,8 @@ export default function Spike() {
   const [rtlMs, setRtlMs] = useState<number | null>(null);
   const [take, setTake] = useState<Float32Array | null>(null);
   const [log, setLog] = useState<string[]>([]);
+  // dev hook: grooveforge://spike?auto=render runs the offline render on launch (no share sheet), for headless checks
+  const { auto } = useLocalSearchParams<{ auto?: string }>();
 
   const report = (step: string, data: object) => {
     const line = { step, route, platform: audio?.platform, ...data };
@@ -71,7 +74,7 @@ export default function Spike() {
     report("residual after shift", { residualMs: r.rtlMs, clicks: r.clicks, pass: Math.abs(r.rtlMs) <= 1 });
   });
 
-  const render = () => run("Render WAV", async (a) => {
+  const render = (save = true) => run("Render WAV", async (a) => {
     const t0 = Date.now();
     const x = await a.renderOffline(loopSong(), drive);
     const f = fingerprint(x);
@@ -80,8 +83,15 @@ export default function Spike() {
       && Math.abs(f.meanAbs - HOST_REFERENCE.meanAbs) < 1e-4
       && Math.abs(f.peak - HOST_REFERENCE.peak) < 1e-4;
     report("offline render", { ...f, ms: Date.now() - t0, drive, matchesHost: drive === 0 ? matchesHost : "n/a (drive on)" });
-    await saveWav(encodeWav(x, a.sampleRate), `gf-loop-drive${drive}.wav`);
+    if (save) await saveWav(encodeWav(x, a.sampleRate), `gf-loop-drive${drive}.wav`);
   });
+
+  useEffect(() => {
+    if (!audio || auto !== "render") return;
+    const t = setTimeout(() => void render(false), 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once when the engine is ready
+  }, [audio]);
 
   const saveTake = () => run("Save take", async (a) => {
     if (!take) throw new Error("record a loop first");
@@ -115,7 +125,7 @@ export default function Spike() {
       <Btn label={`1 · Loop + record (${SOAK_SEC} s)`} onPress={soak} busy={busy} disabled={!audio} />
       <Btn label="2 · Calibrate latency (hold earbud to mic)" onPress={cal} busy={busy} disabled={!audio} />
       <Btn label="3 · Verify shift" onPress={verify} busy={busy} disabled={!audio || rtlMs === null} />
-      <Btn label="4 · Render WAV offline" onPress={render} busy={busy} disabled={!audio} />
+      <Btn label="4 · Render WAV offline" onPress={() => render()} busy={busy} disabled={!audio} />
       <Btn label="Save last take" onPress={saveTake} busy={busy} disabled={!take} />
       <Btn label="Stop" onPress={stop} busy={null} disabled={!audio} />
 

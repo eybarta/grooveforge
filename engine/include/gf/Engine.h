@@ -36,7 +36,7 @@ class Engine {
   const float* captureIn() const { return capIn_.data(); }
   const float* captureOut() const { return capOut_.data(); }
 
-  /** Mono in (may be null = silence), mono out. Real-time safe. */
+  /** Mono in (may be null = silence), mono out; in == out is allowed. Real-time safe. */
   void process(const float* in, float* out, int frames);
 
   int64_t frame() const { return frame_; }

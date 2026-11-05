@@ -58,6 +58,7 @@ void Engine::process(const float* in, float* out, int frames) {
   const int capMax = static_cast<int>(capIn_.size());
 
   for (int i = 0; i < frames; ++i) {
+    const float mic = in ? in[i] : 0.f;  // read before out[i] is written: hosts may process in place (in == out)
     if (play && loopFrames_ > 0) {
       const int64_t pos = frame_ % loopFrames_;
       if (pos == 0) next_ = 0;
@@ -76,7 +77,7 @@ void Engine::process(const float* in, float* out, int frames) {
     if (drive > 0.f) y = std::tanh(k * y) * norm;  // the custom effect: Drive
     out[i] = y;
     if (cap && c < capMax) {
-      capIn_[c] = in ? in[i] : 0.f;
+      capIn_[c] = mic;
       capOut_[c] = y;
       ++c;
     }

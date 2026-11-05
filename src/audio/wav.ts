@@ -1,4 +1,7 @@
-import { WaveFile } from "wavefile";
+import * as wavefileNs from "wavefile";
+
+// wavefile ships UMD flagged __esModule: Node ESM only sees `default`, Babel/Metro only the named export.
+const { WaveFile } = ((wavefileNs as { default?: typeof wavefileNs }).default ?? wavefileNs) as typeof wavefileNs;
 
 /** Mono float samples → WAV bytes (24-bit PCM by default). */
 export function encodeWav(samples: Float32Array, sampleRate: number, bitDepth: "16" | "24" = "24"): Uint8Array {

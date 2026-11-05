@@ -1,0 +1,69 @@
+import { GfEngineNode } from "gf-engine";
+import { Platform } from "react-native";
+import { AudioContext, AudioManager, AudioRecorder, OfflineAudioContext } from "react-native-audio-api";
+import { songToEngineEvents } from "@/song/time";
+import type { Song } from "@/song/types";
+import { CAPTURE_SECONDS, SAMPLE_RATE, type SpikeAudio } from "./types";
+
+function load(node: GfEngineNode, song: Song, sampleRate: number) {
+  const { events, loopFrames } = songToEngineEvents(song, sampleRate);
+  if (!node.engine.setEvents(events.buffer as ArrayBuffer, loopFrames)) throw new Error("engine refused events (still playing?)");
+  return loopFrames;
+}
+
+export async function createSpikeAudio(): Promise<SpikeAudio> {
+  // measurement mode = no iOS voice processing on the route; A2DP keeps Bluetooth output on the built-in mic
+  AudioManager.setSystemOptions({
+    ios: { category: "playAndRecord", mode: "measurement", options: ["allowBluetoothA2DP", "defaultToSpeaker"] },
+  });
+  if ((await AudioManager.requestRecordingPermissions()) !== "Granted") throw new Error("microphone permission denied");
+  await AudioManager.setAudioSessionActivity(true);
+
+  const ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
+  const node = new GfEngineNode(ctx, CAPTURE_SECONDS);
+  node.connect(ctx.destination);
+  // CLAUDE.md: mic processing off (no AEC / NS / AGC)
+  const recorder = new AudioRecorder({ androidInputPreset: "unprocessed", iosVoiceProcessing: false });
+  recorder.connect(ctx, node);
+
+  return {
+    platform: `${Platform.OS} ${Platform.Version} (react-native-audio-api 1.0.0)`,
+    sampleRate: ctx.sampleRate,
+    setSong: async (song) => void load(node, song, ctx.sampleRate),
+    async start() {
+      if (!recorder.isRecording()) {
+        const r = await recorder.start();
+        if (r.status === "error") throw new Error(`recorder: ${r.message}`);
+      }
+      if (ctx.state === "suspended") await ctx.resume();
+      node.engine.play();
+    },
+    stop: async () => node.engine.stop(),
+    setDrive: (amount) => node.engine.setDrive(amount),
+    captureStart: () => node.engine.captureStart(),
+    captureStop: async () => {
+      const { input, output } = node.engine.captureStop();
+      return { input: new Float32Array(input), output: new Float32Array(output) };
+    },
+    reportedLatency: () => ({
+      outputLatency: ctx.outputLatency,
+      baseLatency: ctx.baseLatency,
+      inputLatency: recorder.inputLatency,
+    }),
+    async renderOffline(song, drive) {
+      const { loopFrames } = songToEngineEvents(song, SAMPLE_RATE);
+      const off = new OfflineAudioContext({ numberOfChannels: 1, length: loopFrames, sampleRate: SAMPLE_RATE });
+      const n = new GfEngineNode(off, 1);
+      n.connect(off.destination);
+      load(n, song, SAMPLE_RATE);
+      n.engine.setDrive(drive);
+      n.engine.play();
+      return (await off.startRendering()).getChannelData(0);
+    },
+    async close() {
+      await recorder.stop();
+      await ctx.close();
+      await AudioManager.setAudioSessionActivity(false);
+    },
+  };
+}

@@ -1,0 +1,52 @@
+// Library module so React Native codegen runs for the gf-engine spec (mirrors react-native-audio-worklets).
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+}
+
+def getExtOrDefault(name) {
+  return rootProject.ext.has(name) ? rootProject.ext.get(name) : project.properties["GfEngine_" + name]
+}
+
+apply plugin: "com.android.library"
+if (project.extensions.findByName("kotlin") == null) {
+  apply plugin: "org.jetbrains.kotlin.android"
+}
+apply plugin: "com.facebook.react"
+
+android {
+  namespace "com.eyalbarta.gfengine"
+  sourceSets {
+    main {
+      manifest.srcFile "src/main/AndroidManifestNew.xml"
+      java.srcDirs += ["${project.buildDir}/generated/source/codegen/java"]
+    }
+  }
+  ndkVersion getExtOrDefault("ndkVersion")
+  compileSdkVersion getExtOrDefault("compileSdkVersion").toInteger()
+  defaultConfig {
+    minSdkVersion getExtOrDefault("minSdkVersion").toInteger()
+    targetSdkVersion getExtOrDefault("targetSdkVersion").toInteger()
+  }
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+}
+
+repositories {
+  mavenCentral()
+  google()
+}
+
+dependencies {
+  implementation "com.facebook.react:react-android"
+}
+
+react {
+  jsRootDir = file("../js/")
+  libraryName = "gfengine"
+  codegenJavaPackageName = "com.eyalbarta.gfengine"
+}

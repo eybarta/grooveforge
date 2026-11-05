@@ -1,0 +1,26 @@
+{
+  "name": "gf-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GrooveForge C++ audio engine as a react-native-audio-api node (iOS/Android); the same sources build to WASM for web.",
+  "main": "js/index.ts",
+  "react-native": "js/index.ts",
+  "types": "js/index.ts",
+  "peerDependencies": {
+    "react-native": "*",
+    "react-native-audio-api": ">=1.0.0"
+  },
+  "codegenConfig": {
+    "name": "gfengine",
+    "type": "modules",
+    "jsSrcsDir": "js/specs",
+    "android": {
+      "javaPackageName": "com.eyalbarta.gfengine"
+    },
+    "ios": {
+      "modulesProvider": {
+        "NativeGfEngineModule": "NativeGfEngineModuleProvider"
+      }
+    }
+  }
+}

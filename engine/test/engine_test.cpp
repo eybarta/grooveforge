@@ -69,6 +69,15 @@ int main() {
   assert(c.captured() == kLoop);
   for (int i = 0; i < 1000; ++i) assert(c.captureIn()[kLag + i] == c.captureOut()[i]);
 
+  // in-place processing (react-native-audio-api hands nodes one buffer for input and output)
+  gf::Engine ip(kSr);
+  ip.setEvents(ev.data(), 8, kLoop);
+  ip.play();
+  ip.startCapture();
+  std::vector<float> io(loopIn.begin(), loopIn.begin() + 4096);
+  for (int i = 0; i < 4096; i += 128) ip.process(io.data() + i, io.data() + i, 128);
+  for (int i = 0; i < 4096; ++i) assert(ip.captureIn()[i] == loopIn[i] && io[i] == expected[i]);
+
   // reference checksum for the offline-render comparison on devices (mean |x| and peak of one dry loop)
   double sumAbs = 0;
   for (int64_t i = 0; i < kLoop; ++i) sumAbs += std::fabs(two[i]);
