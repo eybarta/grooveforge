@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GrooveForge · Forging</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&amp;family=Figtree:wght@400;500;600&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07060B}
+a{color:#00E5FF}a:hover{color:#7FF3FF}
+@keyframes gfFly{0%{transform:translate(0,0) scale(1.4);opacity:0}15%{opacity:1}100%{transform:translate(var(--dx),var(--dy)) scale(1);opacity:1}}
+@keyframes gfDash{to{stroke-dashoffset:-40}}
+@keyframes gfFill{0%{width:12%}100%{width:78%}}
+@keyframes gfShimmer{0%,100%{opacity:.45}50%{opacity:1}}
+.gf-fly{animation:gfFly 1.8s cubic-bezier(.2,.8,.2,1) infinite}
+.gf-dash{stroke-dasharray:4 6;animation:gfDash 1s linear infinite}
+.gf-fill{animation:gfFill 3s ease-in-out infinite alternate}
+.gf-shim{animation:gfShimmer 1.4s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){.gf-fly,.gf-dash,.gf-fill,.gf-shim{animation:none}}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #07060B; color: #F4F1FF; font-family: Figtree, system-ui, sans-serif; box-sizing: border-box; padding: 20px 20px 28px; display: flex; flex-direction: column">
+  <div aria-hidden="true" style="position: absolute; right: -160px; top: 260px; width: 560px; height: 560px; border-radius: 50%; background: radial-gradient(circle, rgba(0,229,255,.16), rgba(7,6,11,0) 62%)"></div>
+
+  <div style="position: relative; font-family: Unbounded, sans-serif; font-weight: 800; font-size: 18px; letter-spacing: -0.02em">GROOVE<span style="color: #FF2BD6; text-shadow: 0 0 14px rgba(255,43,214,.7)">FORGE</span></div>
+
+  <div style="position: relative; margin-top: 28px">
+    <div style="font-size: 12px; letter-spacing: .18em; color: #A69DC4">YOUR TAKE</div>
+    <div style="height: 64px; display: flex; align-items: center; gap: 3px; margin-top: 10px" aria-hidden="true">
+      <sc-for list="{{wave}}" as="w" hint-placeholder-count="44">
+        <div style="flex: 1; height: {{w.h}}px; border-radius: 3px; background: {{w.c}}; opacity: {{w.o}}"></div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="position: relative; height: 210px" aria-hidden="true">
+    <svg width="350" height="210" viewBox="0 0 350 210" style="position: absolute; inset: 0">
+      <path class="gf-dash" d="M40 0 C 40 90, 20 120, 22 200" fill="none" stroke="#FF2BD6" stroke-opacity=".6"></path>
+      <path class="gf-dash" d="M120 0 C 120 80, 160 130, 150 200" fill="none" stroke="#00E5FF" stroke-opacity=".6"></path>
+      <path class="gf-dash" d="M210 0 C 210 100, 90 120, 86 200" fill="none" stroke="#C6FF3D" stroke-opacity=".6"></path>
+      <path class="gf-dash" d="M300 0 C 300 90, 270 140, 278 200" fill="none" stroke="#FF2BD6" stroke-opacity=".6"></path>
+    </svg>
+    <div class="gf-fly" style="--dx: -18px; --dy: 190px; position: absolute; left: 34px; top: 0; width: 12px; height: 12px; border-radius: 50%; background: #FF2BD6; box-shadow: 0 0 16px #FF2BD6"></div>
+    <div class="gf-fly" style="--dx: 30px; --dy: 190px; position: absolute; left: 114px; top: 0; width: 11px; height: 11px; transform: rotate(45deg); background: #00E5FF; box-shadow: 0 0 16px #00E5FF; animation-delay: .25s"></div>
+    <div class="gf-fly" style="--dx: -124px; --dy: 190px; position: absolute; left: 204px; top: 0; width: 10px; height: 10px; background: #C6FF3D; box-shadow: 0 0 16px #C6FF3D; animation-delay: .5s"></div>
+    <div class="gf-fly" style="--dx: -22px; --dy: 190px; position: absolute; left: 294px; top: 0; width: 12px; height: 12px; border-radius: 50%; background: #FF2BD6; box-shadow: 0 0 16px #FF2BD6; animation-delay: .75s"></div>
+  </div>
+
+  <div style="position: relative; display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 4px; padding: 12px; border-radius: 16px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08)" aria-hidden="true">
+    <sc-for list="{{cells}}" as="c" hint-placeholder-count="48">
+      <div style="height: 18px; border-radius: 4px; background: {{c.bg}}; box-shadow: {{c.glow}}"></div>
+    </sc-for>
+  </div>
+
+  <div style="position: relative; margin-top: 28px; display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; justify-content: space-between; font-size: 15px"><span>Tempo locked</span><span style="font-family: 'JetBrains Mono', monospace; color: #C6FF3D">112 BPM ✓</span></div>
+    <div style="display: flex; justify-content: space-between; font-size: 15px"><span>Your swing</span><span style="font-family: 'JetBrains Mono', monospace; color: #C6FF3D">58% ✓</span></div>
+    <div style="display: flex; justify-content: space-between; font-size: 15px"><span>Hits matched to your kit</span><span style="font-family: 'JetBrains Mono', monospace; color: #00E5FF">31 · 4 bars</span></div>
+    <div class="gf-shim" style="display: flex; justify-content: space-between; font-size: 15px; color: #CFC8E8"><span>Loading Funk kit + mastering</span><span style="font-family: 'JetBrains Mono', monospace">…</span></div>
+  </div>
+
+  <div style="position: relative; margin-top: auto; height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden" role="progressbar" aria-label="Forging progress" aria-valuenow="78" aria-valuemin="0" aria-valuemax="100">
+    <div class="gf-fill" style="height: 6px; width: 78%; border-radius: 3px; background: linear-gradient(90deg, #FF2BD6, #00E5FF); box-shadow: 0 0 14px rgba(0,229,255,.8)"></div>
+  </div>
+  <div style="position: relative; text-align: center; font-size: 13px; color: #A69DC4; margin-top: 12px">Forging your beat — about 2 seconds</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const lanes = { k: '#FF2BD6', s: '#00E5FF', h: '#C6FF3D', p: '#8B5CFF' };
+    const pattern = 'k..h.s.hk.h..sh.k.kh.s.hk..h.s.h.k.h.sk.h.ph';
+    const wave = pattern.split('').map((ch, i) => ({
+      h: lanes[ch] ? 44 : 8 + Math.round(Math.abs(Math.sin(i * 1.7)) * 10),
+      c: lanes[ch] || 'rgba(255,255,255,.16)',
+      o: lanes[ch] ? 0.35 : 0.6
+    }));
+    const rows = [
+      { color: '#FF2BD6', on: [0, 3, 8, 10] },
+      { color: '#00E5FF', on: [4, 12] },
+      { color: '#C6FF3D', on: [0, 2, 4, 6, 8, 10, 12, 14] }
+    ];
+    const cells = [];
+    rows.forEach((r) => {
+      for (let i = 0; i < 16; i++) {
+        const on = r.on.indexOf(i) !== -1;
+        cells.push({ bg: on ? r.color : 'rgba(255,255,255,.06)', glow: on ? '0 0 10px ' + r.color : 'none' });
+      }
+    });
+    return { wave, cells };
+  }
+}
+</script>
+</body>
+</html>

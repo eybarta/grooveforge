@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GrooveForge · Forge transition spec</title>
+<style>
+@font-face{font-family:Unbounded;font-weight:800;src:url(assets/unbounded-latin-800-normal.woff2) format('woff2')}
+@font-face{font-family:Figtree;font-weight:500;src:url(assets/figtree-latin-500-normal.woff2) format('woff2')}
+@font-face{font-family:Figtree;font-weight:600;src:url(assets/figtree-latin-600-normal.woff2) format('woff2')}
+@font-face{font-family:JBM;font-weight:500;src:url(assets/jetbrains-mono-latin-500-normal.woff2) format('woff2')}
+html,body{margin:0;background:#07060B}
+#frame{position:relative;width:390px;height:844px;overflow:hidden;background:#07060B;color:#F4F1FF;font-family:Figtree,sans-serif}
+.abs{position:absolute}
+.mask{position:absolute;overflow:hidden}
+.mask>div{will-change:auto}
+</style>
+</head>
+<body>
+<div id="frame">
+  <div id="amb" class="abs" style="left:-140px;top:120px;width:670px;height:670px;border-radius:50%;background:radial-gradient(circle,rgba(139,92,255,.20),rgba(7,6,11,0) 62%);z-index:0"></div>
+  <div id="amb2" class="abs" style="left:-60px;top:330px;width:510px;height:510px;border-radius:50%;background:radial-gradient(circle,rgba(0,229,255,.14),rgba(7,6,11,0) 62%);z-index:0;opacity:0"></div>
+  <div class="abs" style="left:24px;top:28px;font-family:Unbounded;font-weight:800;font-size:18px;letter-spacing:-0.02em;z-index:5">GROOVE<span style="color:#FF2BD6;text-shadow:0 0 14px rgba(255,43,214,.7)">FORGE</span></div>
+  <div id="timer" class="abs" style="right:24px;top:30px;font-family:JBM;font-size:14px;color:#A69DC4;z-index:5">00:08</div>
+
+  <div class="mask" style="left:24px;top:236px;width:342px;height:18px;z-index:5"><div id="lab1" style="font-size:12px;font-weight:600;letter-spacing:.18em;color:#FFB8F1">RECORDING · BAR 4 OF 4</div></div>
+  <div class="mask" style="left:24px;top:236px;width:342px;height:18px;z-index:5"><div id="lab2" style="font-size:12px;font-weight:600;letter-spacing:.18em;color:#7FF3FF">FORGING YOUR BEAT</div></div>
+
+  <div id="bars" class="abs" style="left:0;top:0;width:390px;height:844px;z-index:4"></div>
+  <div id="grid" class="abs" style="left:20px;top:520px;width:350px;height:86px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);box-sizing:border-box;z-index:2"></div>
+  <div id="cells" class="abs" style="left:0;top:0;width:390px;height:844px;z-index:3"></div>
+  <div id="beam" class="abs" style="top:524px;width:3px;height:78px;border-radius:2px;background:#fff;box-shadow:0 0 10px #fff,0 0 26px #00E5FF;z-index:6;opacity:0"></div>
+
+  <div id="stat" class="abs" style="left:24px;top:636px;width:342px;z-index:5"></div>
+
+  <div id="btn" class="abs" style="z-index:5;box-sizing:border-box;overflow:hidden">
+    <div id="fill" class="abs" style="left:0;top:0;height:100%;background:linear-gradient(90deg,#FF2BD6,#00E5FF);box-shadow:0 0 14px rgba(0,229,255,.8)"></div>
+    <div id="stop" class="abs" style="width:28px;height:28px;border-radius:8px;background:#FF2BD6;box-shadow:0 0 24px #FF2BD6"></div>
+  </div>
+  <div class="mask" style="left:24px;top:800px;width:342px;height:22px;z-index:5"><div id="ready" style="text-align:center;font-size:14px;font-weight:600;color:#C6FF3D">Ready · tap to play</div></div>
+</div>
+<script src="motion-core.js"></script>
+<script>
+const W = 390, H = 844, B = 60 / 112;
+window.FILM = { w: W, h: H, duration: 14 * B, cuts: [] };
+const L = [
+  { c: '#FF2BD6', shape: 'circle' },
+  { c: '#00E5FF', shape: 'diamond' },
+  { c: '#C6FF3D', shape: 'square' }
+];
+const LANE = { k: 0, s: 1, h: 2 };
+const PATTERN = 'k..h.s.hk.h..sh.k.kh.s.hk..h.s.h.k.h.sk.h.ph';
+const N = PATTERN.length, GAP = 3, BW = (342 - (N - 1) * GAP) / N, WY = 320;
+const COLW = (326 - 15 * 4) / 16, ROWH = 18;
+const cellX = j => 32 + j * (COLW + 4);
+const cellY = r => 532 + r * (ROWH + 4);
+
+// waveform bars
+const bars = [];
+for (let i = 0; i < N; i++) {
+  const ch = PATTERN[i], lane = LANE[ch];
+  const hit = lane !== undefined;
+  const base = 10 + Math.round(Math.abs(Math.sin(i * 1.7)) * 14);
+  const el = document.createElement('div');
+  el.className = 'abs';
+  document.getElementById('bars').appendChild(el);
+  const step = Math.floor(i * 16 / N);
+  bars.push({ el, hit, lane, h: hit ? (lane === 0 ? 70 : lane === 1 ? 58 : 42) : (ch === 'p' ? 30 : base),
+    x: 24 + i * (BW + GAP) + BW / 2, step, ts: 4 * B + (i / N) * 3.1 * B, ph: i * 0.13, p: ch === 'p' });
+}
+// grid cells (3 lanes × 16 steps)
+const cells = {};
+for (let r = 0; r < 3; r++) for (let j = 0; j < 16; j++) {
+  const el = document.createElement('div');
+  el.className = 'abs';
+  el.style.cssText += `left:${cellX(j)}px;top:${cellY(r)}px;width:${COLW}px;height:${ROWH}px;border-radius:4px`;
+  document.getElementById('cells').appendChild(el);
+  cells[r + ':' + j] = { el, r, j, land: Infinity };
+}
+bars.forEach(b => { if (b.hit) { const c = cells[b.lane + ':' + b.step]; c.land = Math.min(c.land, b.ts + 0.5); } });
+
+// status lines
+const STAT = [['Tempo locked', '112 BPM', '#C6FF3D'], ['Your swing', '58%', '#C6FF3D'], ['Hits matched to your kit', '31 · 4 bars', '#00E5FF']];
+const statEls = STAT.map((s, i) => {
+  const m = document.createElement('div');
+  m.className = 'mask';
+  m.style.cssText = `left:0;top:${i * 30}px;width:342px;height:24px`;
+  m.innerHTML = `<div style="display:flex;justify-content:space-between;font-size:15px;font-weight:500"><span>${s[0]}</span><span style="font-family:JBM;color:${s[2]}">${s[1]}</span></div>`;
+  document.getElementById('stat').appendChild(m);
+  return m.firstChild;
+});
+
+const rise = (el, t, t0, out) => {
+  const u = M.spring(t - t0, 14, 0.85);
+  el.style.transform = `translateY(${out ? -170 * u : 170 * (1 - u)}%)`;
+};
+const lab1 = document.getElementById('lab1'), lab2 = document.getElementById('lab2');
+const btn = document.getElementById('btn'), fill = document.getElementById('fill'), stop = document.getElementById('stop');
+const beam = document.getElementById('beam'), ready = document.getElementById('ready'), timer = document.getElementById('timer');
+const grid = document.getElementById('grid'), amb2 = document.getElementById('amb2');
+
+window.seek = async (t) => {
+  // ---- labels
+  rise(lab1, t, 2.5 * B, true);
+  rise(lab2, t, 2.6 * B, false);
+  timer.style.opacity = 1 - M.prog(t, 2 * B, 2.6 * B);
+  amb2.style.opacity = M.prog(t, 3 * B, 6 * B);
+
+  // ---- waveform -> dots -> flight
+  const live = 1 - M.prog(t, 2 * B, 2.5 * B);
+  bars.forEach((b, i) => {
+    const wob = 0.78 + 0.22 * Math.sin(2 * Math.PI * (t * 1.87 + b.ph));
+    let h = b.h * (1 - live * (1 - wob));
+    const sc = M.spring(t - (2.5 * B + i * 0.007), 11, 0.82); // collapse
+    const s = b.el.style;
+    if (!b.hit) {
+      const k = Math.max(0, 1 - sc);
+      s.cssText = `left:${b.x - BW / 2}px;top:${WY - h * k / 2}px;width:${BW}px;height:${h * k}px;border-radius:3px;` +
+        `background:${b.p ? '#8B5CFF' : 'rgba(255,255,255,.16)'};opacity:${k > 0.01 ? 1 : 0}`;
+      return;
+    }
+    const lane = L[b.lane];
+    const dot = 11;
+    let w = M.lerp(BW, dot, sc), hh = M.lerp(h, dot, sc);
+    let rad = lane.shape === 'circle' ? M.lerp(3, dot / 2, sc) : lane.shape === 'square' ? M.lerp(3, 2, sc) : M.lerp(3, 1.5, sc);
+    let rot = lane.shape === 'diamond' ? 45 * sc : 0;
+    // flight
+    const f = M.spring(t - b.ts, 9.5, 0.8);
+    const cx = cellX(b.step) + COLW / 2, cy = cellY(b.lane) + ROWH / 2;
+    const x = M.lerp(b.x, cx, f);
+    const y = M.lerp(WY, cy, f) - 80 * Math.sin(Math.PI * M.clamp(f));
+    const g = M.prog(f, 0.72, 1);
+    w = M.lerp(w, COLW, M.ease.inOut(g)); hh = M.lerp(hh, ROWH, M.ease.inOut(g));
+    rad = M.lerp(rad, 4, g); rot = M.lerp(rot, 0, g);
+    const landed = t >= b.ts + 0.5;
+    s.cssText = `left:${x - w / 2}px;top:${y - hh / 2}px;width:${w}px;height:${hh}px;border-radius:${rad}px;` +
+      `transform:rotate(${rot}deg);background:${lane.c};box-shadow:0 0 ${10 + 8 * (1 - g) * M.clamp(f * 4)}px ${lane.c};opacity:${landed ? 0 : 1};z-index:4`;
+  });
+
+  // ---- grid + cells
+  const gIn = M.spring(t - 3 * B, 12, 0.85);
+  grid.style.opacity = gIn;
+  grid.style.transform = `translateY(${(1 - gIn) * 24}px)`;
+  const beamX = M.lerp(32, 358, M.prog(t, 10 * B, 14 * B));
+  Object.values(cells).forEach(c => {
+    const s = c.el.style;
+    const on = t >= c.land;
+    const base = c.j % 4 === 0 ? 'rgba(255,255,255,.09)' : 'rgba(255,255,255,.05)';
+    if (!on) {
+      s.background = base; s.boxShadow = 'none'; s.opacity = gIn; s.transform = `translateY(${(1 - gIn) * 24}px)`;
+      return;
+    }
+    const color = L[c.r].c;
+    const flash = Math.exp(-(t - c.land) * 6);
+    const tPass = 10 * B + (c.j / 16) * 4 * B;
+    const pass = t >= tPass ? Math.exp(-(t - tPass) * 7) : 0;
+    const k = Math.max(flash, pass);
+    s.background = color; s.opacity = 1;
+    s.boxShadow = `0 0 ${10 + 18 * k}px ${color}`;
+    s.transform = `scale(${1 + 0.18 * k})`;
+  });
+  beam.style.left = (beamX - 1.5) + 'px';
+  beam.style.opacity = M.prog(t, 10 * B, 10.4 * B) * (1 - M.prog(t, 13.7 * B, 14 * B));
+
+  // ---- status lines
+  statEls.forEach((el, i) => rise(el, t, (8 + i) * B, false));
+
+  // ---- record button -> progress bar
+  const press = M.spring(t - 2 * B, 22, 0.55) - M.spring(t - 2.2 * B, 22, 0.55);
+  const m = M.spring(t - 2.5 * B, 10, 0.82);
+  const bw = M.lerp(88, 326, m), bh = M.lerp(88, 6, m), cy = M.lerp(752, 780, m);
+  const sc = 1 - 0.08 * press;
+  btn.style.cssText = `position:absolute;z-index:5;box-sizing:border-box;overflow:hidden;` +
+    `left:${195 - bw / 2}px;top:${cy - bh / 2}px;width:${bw}px;height:${bh}px;border-radius:${M.lerp(44, 3, m)}px;` +
+    `border:${M.lerp(2, 0, m)}px solid #FF2BD6;background:rgba(255,${Math.round(M.lerp(43, 255, m))},${Math.round(M.lerp(214, 255, m))},${M.lerp(0.16, 0.08, m)});` +
+    `transform:scale(${sc});box-shadow:0 0 ${M.lerp(22, 0, m)}px rgba(255,43,214,.5);opacity:${1 - M.prog(t, 11.5 * B, 12.2 * B)}`;
+  stop.style.left = (bw / 2 - 14) + 'px'; stop.style.top = (bh / 2 - 14) + 'px';
+  stop.style.opacity = 1 - M.prog(m, 0, 0.35);
+  stop.style.transform = `scale(${1 - 0.6 * M.prog(m, 0, 0.35)})`;
+  fill.style.width = (100 * M.track(t, [[3 * B, 0], [10 * B, 1]])) + '%';
+  fill.style.opacity = M.prog(t, 3 * B, 3.3 * B);
+  rise(ready, t, 12 * B, false);
+};
+
+window.ready = document.fonts.ready;
+if (!navigator.webdriver) {
+  let t0 = null, playing = true, cur = Number(new URLSearchParams(location.search).get('t') || 0);
+  const tick = (now) => {
+    if (playing) { if (t0 === null) t0 = now - cur * 1000; cur = ((now - t0) / 1000) % FILM.duration; }
+    seek(cur); requestAnimationFrame(tick);
+  };
+  addEventListener('keydown', e => {
+    if (e.code === 'Space') { playing = !playing; t0 = null; }
+    if (e.code === 'ArrowRight') { playing = false; cur = Math.min(FILM.duration, cur + 1 / 60); }
+    if (e.code === 'ArrowLeft') { playing = false; cur = Math.max(0, cur - 1 / 60); }
+  });
+  requestAnimationFrame(tick);
+}
+seek(0);
+</script>
+</body>
+</html>

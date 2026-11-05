@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GrooveForge · Studio</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&amp;family=Figtree:wght@400;500;600&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07060B}
+a{color:#00E5FF}a:hover{color:#7FF3FF}
+@keyframes gfSweep{from{transform:translateX(0)}to{transform:translateX(304px)}}
+@keyframes gfQ{0%,100%{box-shadow:0 0 0 0 rgba(255,176,32,.6)}50%{box-shadow:0 0 0 5px rgba(255,176,32,0)}}
+.gf-beam{animation:gfSweep 2.5s linear infinite}
+.gf-q{animation:gfQ 1.4s ease-in-out infinite}
+.gf-paused .gf-beam{animation-play-state:paused}
+@media (prefers-reduced-motion: reduce){.gf-beam,.gf-q{animation:none}}
+</style>
+</helmet>
+<div class="{{rootClass}}" style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #07060B; color: #F4F1FF; font-family: Figtree, system-ui, sans-serif; box-sizing: border-box; padding: 20px 16px 24px; display: flex; flex-direction: column; gap: 16px">
+  <div aria-hidden="true" style="position: absolute; left: -200px; bottom: -160px; width: 620px; height: 620px; border-radius: 50%; background: radial-gradient(circle, rgba(255,43,214,.14), rgba(7,6,11,0) 62%)"></div>
+
+  <div style="position: relative; display: flex; align-items: center; justify-content: space-between; gap: 10px">
+    <div>
+      <div style="font-family: Unbounded, sans-serif; font-weight: 700; font-size: 17px">Morning Pocket</div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #A69DC4; margin-top: 4px">112 BPM · A minor · swing 58% · −14 LUFS</div>
+    </div>
+    <button type="button" onClick="{{togglePlay}}" aria-label="{{playAria}}" style="width: 56px; height: 56px; border-radius: 28px; border: 2px solid #00E5FF; background: rgba(0,229,255,.14); color: #00E5FF; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 22px rgba(0,229,255,.45)">
+      <sc-if value="{{playing}}" hint-placeholder-val="{{ true }}">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg>
+      </sc-if>
+      <sc-if value="{{paused}}" hint-placeholder-val="{{ false }}">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5l11 7-11 7z"></path></svg>
+      </sc-if>
+    </button>
+  </div>
+
+  <div style="position: relative; display: flex; gap: 8px; overflow-x: auto">
+    <sc-for list="{{flavors}}" as="f" hint-placeholder-count="5">
+      <button type="button" onClick="{{f.pick}}" aria-pressed="{{f.pressed}}" style="flex: none; min-height: 44px; padding: 0 16px; border-radius: 14px; border: 1px solid {{f.border}}; background: {{f.bg}}; color: {{f.color}}; font-family: Figtree, sans-serif; font-size: 14px; font-weight: 600; box-shadow: {{f.glow}}">{{f.label}}</button>
+    </sc-for>
+  </div>
+
+  <div style="position: relative; padding: 12px 10px; border-radius: 18px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.08)">
+    <div style="position: relative; display: flex; flex-direction: column; gap: 6px">
+      <sc-for list="{{lanes}}" as="lane" hint-placeholder-count="5">
+        <div style="display: flex; align-items: center; gap: 4px">
+          <div style="width: 30px; flex: none; font-size: 11px; font-weight: 600; color: {{lane.color}}; font-family: 'JetBrains Mono', monospace">{{lane.short}}</div>
+          <div style="flex: 1; display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 3px">
+            <sc-for list="{{lane.cells}}" as="c" hint-placeholder-count="16">
+              <button type="button" class="{{c.cls}}" onClick="{{c.toggle}}" aria-label="{{c.label}}" aria-pressed="{{c.pressed}}" style="height: 38px; padding: 0; border-radius: 5px; border: 1px solid {{c.border}}; background: {{c.bg}}; box-shadow: {{c.glow}}; opacity: {{c.op}}; color: #07060B; font-size: 11px; font-weight: 700">{{c.mark}}</button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <div class="gf-beam" aria-hidden="true" style="position: absolute; left: 44px; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; background: #FFFFFF; box-shadow: 0 0 10px #FFFFFF, 0 0 26px #00E5FF"></div>
+  </div>
+  <div style="position: relative; font-size: 12px; color: #A69DC4; margin-top: -6px">Amber <span style="color: #FFB020">?</span> = not sure what you played. Tap to fix.</div>
+
+  <div style="position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+    <sc-for list="{{knobs}}" as="k" hint-placeholder-count="6">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px; border-radius: 14px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.08)">
+        <svg role="img" aria-label="{{k.aria}}" width="56" height="56" viewBox="0 0 56 56">
+          <circle cx="28" cy="28" r="22" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="5" stroke-dasharray="104 140" transform="rotate(135 28 28)" stroke-linecap="round"></circle>
+          <circle cx="28" cy="28" r="22" fill="none" stroke="{{k.color}}" stroke-width="5" stroke-dasharray="{{k.dash}}" transform="rotate(135 28 28)" stroke-linecap="round" style="filter: drop-shadow(0 0 4px {{k.color}})"></circle>
+          <text x="28" y="32" text-anchor="middle" font-size="12" font-family="JetBrains Mono, monospace" fill="#F4F1FF">{{k.value}}</text>
+        </svg>
+        <div style="font-size: 12px; font-weight: 600; color: #CFC8E8">{{k.name}}</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="position: relative; margin-top: auto; display: flex; gap: 10px; align-items: stretch">
+    <button type="button" onClick="{{toggleAB}}" aria-label="Switch between your recording and the studio render" style="flex: 1; min-height: 52px; border-radius: 16px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); color: #F4F1FF; display: flex; align-items: center; justify-content: center; gap: 10px; font-family: Figtree, sans-serif; font-size: 14px; font-weight: 600">
+      <span style="color: {{mouthColor}}">Your mouth</span>
+      <span style="width: 40px; height: 22px; border-radius: 11px; background: rgba(255,255,255,.1); position: relative; display: inline-block">
+        <span style="position: absolute; top: 3px; left: {{abLeft}}px; width: 16px; height: 16px; border-radius: 8px; background: #FF2BD6; box-shadow: 0 0 10px #FF2BD6"></span>
+      </span>
+      <span style="color: {{studioColor}}">Studio</span>
+    </button>
+    <button type="button" style="min-height: 52px; padding: 0 22px; border-radius: 16px; border: none; background: #C6FF3D; color: #07060B; font-family: Unbounded, sans-serif; font-size: 13px; font-weight: 700; box-shadow: 0 0 24px rgba(198,255,61,.45)">Export</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      playing: true,
+      studio: true,
+      flavor: 'funk',
+      on: {
+        kick: [0, 3, 8, 10, 11],
+        snare: [4, 12],
+        hat: [0, 2, 4, 6, 8, 9, 10, 12, 14],
+        perc: [7, 15],
+        bass: [0, 3, 8, 11, 14]
+      }
+    };
+  }
+  renderVals() {
+    const s = this.state;
+    const defs = [
+      { id: 'kick', short: '●KK', color: '#FF2BD6', name: 'Kick' },
+      { id: 'snare', short: '▲SN', color: '#00E5FF', name: 'Snare' },
+      { id: 'hat', short: '■HH', color: '#C6FF3D', name: 'Hat' },
+      { id: 'perc', short: '◆PC', color: '#8B5CFF', name: 'Perc' },
+      { id: 'bass', short: '♪BS', color: '#FF5A1F', name: 'Bass' }
+    ];
+    const unsure = { 'hat-9': true, 'kick-11': true };
+    const lanes = defs.map((d) => {
+      const list = s.on[d.id];
+      const cells = [];
+      for (let i = 0; i < 16; i++) {
+        const on = list.indexOf(i) !== -1;
+        const q = on && unsure[d.id + '-' + i];
+        const beat = i % 4 === 0;
+        cells.push({
+          bg: q ? '#FFB020' : on ? d.color : beat ? 'rgba(255,255,255,.09)' : 'rgba(255,255,255,.045)',
+          border: on ? 'transparent' : 'rgba(255,255,255,.06)',
+          glow: on ? '0 0 10px ' + (q ? '#FFB020' : d.color) : 'none',
+          op: on ? (d.id === 'hat' && i % 4 !== 0 ? 0.7 : 1) : 1,
+          mark: q ? '?' : '',
+          cls: q ? 'gf-q' : '',
+          pressed: on ? 'true' : 'false',
+          label: d.name + ' step ' + (i + 1) + (on ? ', on' : ', off') + (q ? ', unsure' : ''),
+          toggle: () => {
+            const next = Object.assign({}, this.state.on);
+            const cur = next[d.id].slice();
+            const at = cur.indexOf(i);
+            if (at === -1) cur.push(i); else cur.splice(at, 1);
+            next[d.id] = cur;
+            this.setState({ on: next });
+          }
+        });
+      }
+      return { short: d.short, color: d.color, cells };
+    });
+    const fl = [['funk', 'Funk'], ['trap', '808'], ['house', 'House'], ['bap', 'Boom Bap'], ['afro', 'Afro']];
+    const flavors = fl.map((f) => {
+      const sel = s.flavor === f[0];
+      return {
+        label: f[1],
+        pressed: sel ? 'true' : 'false',
+        border: sel ? '#FF2BD6' : 'rgba(255,255,255,.1)',
+        bg: sel ? 'rgba(255,43,214,.16)' : 'rgba(255,255,255,.04)',
+        color: sel ? '#FFC9F4' : '#CFC8E8',
+        glow: sel ? '0 0 18px rgba(255,43,214,.4)' : 'none',
+        pick: () => this.setState({ flavor: f[0] })
+      };
+    });
+    const kv = [
+      ['Quantize', 72, '#00E5FF'], ['Swing', 58, '#FF2BD6'], ['Humanize', 35, '#C6FF3D'],
+      ['Punch', 64, '#FF5A1F'], ['Space', 28, '#8B5CFF'], ['Loudness', 80, '#FFB020']
+    ];
+    const knobs = kv.map((k) => ({
+      name: k[0], value: k[1], color: k[2],
+      dash: Math.round(104 * k[1] / 100) + ' 140',
+      aria: k[0] + ' ' + k[1] + ' percent'
+    }));
+    return {
+      lanes, flavors, knobs,
+      playing: s.playing,
+      paused: !s.playing,
+      playAria: s.playing ? 'Pause' : 'Play',
+      rootClass: s.playing ? '' : 'gf-paused',
+      togglePlay: () => this.setState({ playing: !s.playing }),
+      toggleAB: () => this.setState({ studio: !s.studio }),
+      abLeft: s.studio ? 21 : 3,
+      mouthColor: s.studio ? '#A69DC4' : '#F4F1FF',
+      studioColor: s.studio ? '#F4F1FF' : '#A69DC4'
+    };
+  }
+}
+</script>
+</body>
+</html>
