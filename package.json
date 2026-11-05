@@ -44,7 +44,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build:wasm": "./scripts/build-wasm.sh",
-    "test:engine": "cmake -S engine -B engine/build && cmake --build engine/build && ctest --test-dir engine/build --output-on-failure"
+    "test:engine": "cmake -S engine -B engine/build && cmake --build engine/build && ctest --test-dir engine/build --output-on-failure",
+    "golden:make": "node --no-warnings scripts/make-synthetic-takes.ts",
+    "golden:update": "GOLDEN_UPDATE=1 vitest run golden"
   },
   "private": true
 }

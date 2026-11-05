@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "performer": "synthetic",
+  "device": "make-synthetic-takes.ts",
+  "bpm": 90,
+  "hits": [
+    {
+      "t": 0.5046,
+      "class": "kick"
+    },
+    {
+      "t": 0.82,
+      "class": "hatClosed"
+    },
+    {
+      "t": 1.1717,
+      "class": "snare"
+    },
+    {
+      "t": 1.4997,
+      "class": "hatClosed"
+    },
+    {
+      "t": 1.5003,
+      "class": "kick"
+    },
+    {
+      "t": 1.8279,
+      "class": "kick"
+    },
+    {
+      "t": 2.1627,
+      "class": "hatClosed"
+    },
+    {
+      "t": 2.49,
+      "class": "snare"
+    },
+    {
+      "t": 2.8362,
+      "class": "hatClosed"
+    },
+    {
+      "t": 3.1748,
+      "class": "kick"
+    },
+    {
+      "t": 3.4989,
+      "class": "hatClosed"
+    },
+    {
+      "t": 3.8264,
+      "class": "snare"
+    },
+    {
+      "t": 4.1643,
+      "class": "hatClosed"
+    },
+    {
+      "t": 4.1684,
+      "class": "kick"
+    },
+    {
+      "t": 4.5135,
+      "class": "kick"
+    },
+    {
+      "t": 4.8341,
+      "class": "hatClosed"
+    },
+    {
+      "t": 5.1681,
+      "class": "snare"
+    },
+    {
+      "t": 5.4885,
+      "class": "hatClosed"
+    }
+  ],
+  "hum": []
+}

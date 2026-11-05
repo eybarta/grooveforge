@@ -1,0 +1,21 @@
+{
+  "detector": "poc-heuristics",
+  "precision": 1,
+  "recall": 0.81,
+  "onsetF1": 0.895,
+  "classAccuracy": 0.706,
+  "perTake": {
+    "synthetic-boombap-90": {
+      "precision": 1,
+      "recall": 0.889,
+      "onsetF1": 0.941,
+      "classAccuracy": 0.875
+    },
+    "synthetic-trap-140": {
+      "precision": 1,
+      "recall": 0.75,
+      "onsetF1": 0.857,
+      "classAccuracy": 0.556
+    }
+  }
+}

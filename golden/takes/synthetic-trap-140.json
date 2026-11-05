@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "performer": "synthetic",
+  "device": "make-synthetic-takes.ts",
+  "bpm": 140,
+  "hits": [
+    {
+      "t": 0.5002,
+      "class": "kick"
+    },
+    {
+      "t": 0.715,
+      "class": "hatClosed"
+    },
+    {
+      "t": 0.8124,
+      "class": "kick"
+    },
+    {
+      "t": 1.1406,
+      "class": "hatClosed"
+    },
+    {
+      "t": 1.1498,
+      "class": "hatOpen"
+    },
+    {
+      "t": 1.364,
+      "class": "snare"
+    },
+    {
+      "t": 1.5703,
+      "class": "kick"
+    },
+    {
+      "t": 1.5814,
+      "class": "hatClosed"
+    },
+    {
+      "t": 1.8972,
+      "class": "perc"
+    },
+    {
+      "t": 2.0012,
+      "class": "hatClosed"
+    },
+    {
+      "t": 2.2146,
+      "class": "hatClosed"
+    },
+    {
+      "t": 2.2199,
+      "class": "kick"
+    },
+    {
+      "t": 2.4159,
+      "class": "hatClosed"
+    },
+    {
+      "t": 2.8525,
+      "class": "hatClosed"
+    },
+    {
+      "t": 2.9607,
+      "class": "kick"
+    },
+    {
+      "t": 3.0639,
+      "class": "snare"
+    },
+    {
+      "t": 3.2891,
+      "class": "hatClosed"
+    },
+    {
+      "t": 3.3942,
+      "class": "perc"
+    },
+    {
+      "t": 3.5055,
+      "class": "hatClosed"
+    },
+    {
+      "t": 3.5529,
+      "class": "hatClosed"
+    },
+    {
+      "t": 3.6053,
+      "class": "hatClosed"
+    },
+    {
+      "t": 3.6502,
+      "class": "hatClosed"
+    },
+    {
+      "t": 3.7238,
+      "class": "hatClosed"
+    },
+    {
+      "t": 3.7614,
+      "class": "hatClosed"
+    }
+  ],
+  "hum": [
+    {
+      "start": 0.5,
+      "end": 1.1429,
+      "midi": 36
+    },
+    {
+      "start": 1.5714,
+      "end": 2,
+      "midi": 39
+    }
+  ]
+}
