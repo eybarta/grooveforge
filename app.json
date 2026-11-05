@@ -1,0 +1,58 @@
+{
+  "expo": {
+    "name": "GrooveForge",
+    "slug": "grooveforge",
+    "version": "2.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "grooveforge",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#07060B",
+    "ios": {
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.eyalbarta.grooveforge"
+    },
+    "android": {
+      "package": "com.eyalbarta.grooveforge",
+      "adaptiveIcon": {
+        "backgroundColor": "#07060B",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#07060B",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 76
+        }
+      ],
+      [
+        "react-native-audio-api",
+        {
+          "iosBackgroundMode": false,
+          "iosMicrophonePermission": "GrooveForge listens to your beatbox to turn it into drums.",
+          "androidPermissions": [
+            "android.permission.RECORD_AUDIO",
+            "android.permission.MODIFY_AUDIO_SETTINGS"
+          ],
+          "androidForegroundService": false
+        }
+      ],
+      "expo-sharing"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

@@ -1,9 +1,35 @@
-node_modules
-dist
-.output
-.vinxi
-.tanstack
-screenshots
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# generated native folders (Continuous Native Generation)
+/ios
+/android
+.kotlin/
+
+# builds
+engine/build/
+public/gf-engine.wasm
+
+# secrets / signing
 .env
-.env.*
+.env*.local
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.pem
+
+# misc
+.metro-health-check*
+npm-debug.*
+*.tsbuildinfo
 *.log
+.DS_Store
+.serena/
