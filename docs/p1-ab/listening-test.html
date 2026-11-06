@@ -1,0 +1,235 @@
+<title>GrooveForge Listening Test</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow column, a phone-first listening booth — two pads, a readout, two answers. Neon Forge (docs/design): dark only, glow = sound playing. */
+:root {
+  --bg: #07060B;
+  --glass: rgba(255, 255, 255, .04);
+  --line: rgba(255, 255, 255, .08);
+  --fg: #F4F2FA;
+  --muted: rgba(244, 242, 250, .62);
+  --a: #FF2BD6;          /* kick lane: version A, ● */
+  --b: #00E5FF;          /* snare lane: version B, ◆ */
+  --ok: #C6FF3D;         /* closed-hat lane: done */
+  --display: "Unbounded", "Arial Black", system-ui, sans-serif;
+  --ui: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font: 16px/1.5 var(--ui); }
+main {
+  max-width: 34rem; margin: 0 auto; display: grid; gap: 1.5rem;
+  padding-block: 2.5rem 3rem;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.eyebrow { font: 500 .75rem/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 700 clamp(1.6rem, 6vw, 2.2rem)/1.15 var(--display); margin: .4rem 0 0; text-wrap: balance; }
+h2 { font: 500 1.15rem/1.3 var(--display); margin: 0; text-wrap: balance; }
+p { margin: 0; color: var(--muted); max-width: 65ch; }
+section { display: grid; gap: 1rem; }
+.panel { background: var(--glass); border: 1px solid var(--line); border-radius: 1.25rem; padding: 1.25rem; display: grid; gap: 1rem; }
+.chips { display: flex; flex-wrap: wrap; gap: .5rem; }
+button {
+  font: 600 1rem/1.2 var(--ui); color: var(--fg); background: var(--glass);
+  border: 1px solid var(--line); border-radius: 999px; min-height: 48px; padding: .7rem 1.2rem; cursor: pointer;
+}
+button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+button[aria-pressed="true"] { border-color: var(--fg); }
+button:disabled { opacity: .38; cursor: default; }
+.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.progress { display: flex; gap: .4rem; }
+.progress i { width: .55rem; height: .55rem; border-radius: 50%; border: 1px solid var(--muted); }
+.progress i.done { background: var(--ok); border-color: var(--ok); }
+.progress i.now { border-color: var(--fg); background: var(--fg); }
+.meta { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+.meta span { font: 400 .8rem/1 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.pads { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+.pad {
+  --c: var(--a); border-radius: 1.25rem; min-height: 9rem; display: grid; place-items: center; gap: .3rem;
+  padding: 1rem; transition: box-shadow .25s, border-color .25s;
+}
+.pad.b { --c: var(--b); }
+.pad .mark { font-size: 1.6rem; line-height: 1; color: var(--c); }
+.pad .name { font: 700 1.5rem/1 var(--display); }
+.pad .hint { font: 400 .75rem/1 var(--mono); color: var(--muted); }
+.pad[aria-pressed="true"] { border-color: var(--c); box-shadow: 0 0 0 1px var(--c), 0 0 2.2rem -0.4rem var(--c); }
+.readout { font: 500 .95rem/1 var(--mono); text-align: center; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 1em; }
+.answers { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+.answers button { border-radius: 1rem; }
+.code { font: 500 1.35rem/1.2 var(--mono); letter-spacing: .06em; padding: 1rem; border-radius: 1rem; border: 1px dashed var(--muted); text-align: center; user-select: all; overflow-wrap: anywhere; }
+.note { font-size: .875rem; }
+.err { color: var(--a); font-size: .875rem; }
+@media (prefers-reduced-motion: reduce) { .pad { transition: none; } }
+@media (max-width: 360px) { .pad { min-height: 7rem; } }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">GrooveForge · blind listening test</div>
+    <h1>Which beat sounds better?</h1>
+  </header>
+
+  <section id="intro">
+    <p>Six short loops, each in two versions, A and B. Within a pair the beat and the loudness are the same; only the sound differs. Play both as often as you like, switch back and forth, then pick the one that sounds better to you. It takes about four minutes.</p>
+    <div class="panel">
+      <h2 id="device-label">What are you listening on?</h2>
+      <div class="chips" role="group" aria-labelledby="device-label">
+        <button type="button" data-device="h" aria-pressed="false">Headphones</button>
+        <button type="button" data-device="s" aria-pressed="false">Good speaker</button>
+        <button type="button" data-device="p" aria-pressed="false">Phone or laptop speaker</button>
+      </div>
+      <button type="button" class="primary" id="start" disabled>Start listening</button>
+    </div>
+  </section>
+
+  <section id="trial" hidden>
+    <div class="meta">
+      <div class="progress" id="progress" aria-hidden="true"></div>
+      <span id="count"></span>
+    </div>
+    <div class="panel">
+      <div class="meta">
+        <h2 id="pair-name"></h2>
+        <span id="pair-tempo"></span>
+      </div>
+      <div class="pads">
+        <button type="button" class="pad a" id="pad-a" aria-pressed="false" aria-label="Play version A">
+          <span class="mark" aria-hidden="true">●</span><span class="name">A</span><span class="hint" id="hint-a">tap to play</span>
+        </button>
+        <button type="button" class="pad b" id="pad-b" aria-pressed="false" aria-label="Play version B">
+          <span class="mark" aria-hidden="true">◆</span><span class="name">B</span><span class="hint" id="hint-b">tap to play</span>
+        </button>
+      </div>
+      <div class="readout" id="readout" aria-live="off"></div>
+      <p class="note" id="switch-note">Tapping the other pad switches versions at the same spot in the loop.</p>
+      <p class="err" id="error" hidden></p>
+    </div>
+    <div class="answers">
+      <button type="button" id="pick-a" disabled>A sounds better</button>
+      <button type="button" id="pick-b" disabled>B sounds better</button>
+    </div>
+    <p class="note" id="pick-note">Play both versions to answer.</p>
+  </section>
+
+  <section id="done" hidden>
+    <div class="panel">
+      <h2>Thanks for listening</h2>
+      <p>Send this code to the person who shared the test with you. It records your six answers and nothing else.</p>
+      <div class="code" id="code"></div>
+      <button type="button" id="copy">Copy code</button>
+    </div>
+  </section>
+</main>
+
+<script>
+// Answers are recorded as the file each listener picked (x or y per pair); which file is which version is not on this page.
+const PAIRS = [
+  { id: "p1", name: "Boom Bap · full beat", bpm: 90 },
+  { id: "p2", name: "Boom Bap · drums only", bpm: 90 },
+  { id: "p3", name: "Boom Bap · kick + 808", bpm: 90 },
+  { id: "p4", name: "Trap · full beat", bpm: 140 },
+  { id: "p5", name: "Trap · drums only", bpm: 140 },
+  { id: "p6", name: "Trap · kick + 808", bpm: 140 },
+];
+const $ = (id) => document.getElementById(id);
+const coin = () => crypto.getRandomValues(new Uint8Array(1))[0] < 128;
+function shuffle(list) {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+const run = { device: null, order: shuffle(PAIRS), i: 0, picks: {} };
+let audio = [], heard = [false, false], playing = -1, raf = 0, sides = [];
+
+document.querySelectorAll("[data-device]").forEach((b) => b.addEventListener("click", () => {
+  run.device = b.dataset.device;
+  document.querySelectorAll("[data-device]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  $("start").disabled = false;
+}));
+$("start").addEventListener("click", () => { $("intro").hidden = true; $("trial").hidden = false; showPair(); });
+
+function showPair() {
+  stop();
+  const pair = run.order[run.i];
+  sides = coin() ? ["x", "y"] : ["y", "x"]; // [file behind A, file behind B], fresh per pair and listener
+  audio = sides.map((f) => Object.assign(new Audio(`audio/${pair.id}-${f}.wav`), { loop: true, preload: "auto" }));
+  audio.forEach((a) => a.addEventListener("error", () => { $("error").textContent = "A clip didn't load. Check your connection, then tap the pad again."; $("error").hidden = false; }));
+  heard = [false, false];
+  $("error").hidden = true;
+  $("pair-name").textContent = pair.name;
+  $("pair-tempo").textContent = `${pair.bpm} BPM · loop`;
+  $("count").textContent = `Pair ${run.i + 1} of ${PAIRS.length}`;
+  $("progress").innerHTML = PAIRS.map((_, k) => `<i class="${k < run.i ? "done" : k === run.i ? "now" : ""}"></i>`).join("");
+  render();
+}
+
+function play(k) {
+  if (playing === k) { stop(); return; }
+  const from = playing >= 0 ? audio[playing].currentTime : audio[k].currentTime;
+  if (playing >= 0) audio[playing].pause();
+  audio[k].currentTime = from % (audio[k].duration || Infinity);
+  audio[k].play().then(() => { heard[k] = true; render(); }).catch(() => {
+    $("error").textContent = "Your browser blocked playback. Tap the pad again.";
+    $("error").hidden = false;
+  });
+  playing = k;
+  render();
+  cancelAnimationFrame(raf);
+  tick();
+}
+function stop() {
+  if (playing >= 0) audio[playing].pause();
+  playing = -1;
+  cancelAnimationFrame(raf);
+  render();
+}
+const clock = (s) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
+function tick() {
+  if (playing < 0) return;
+  const a = audio[playing];
+  $("readout").textContent = `${playing ? "B" : "A"}  ${clock(a.currentTime)} / ${clock(a.duration || 0)}`;
+  raf = requestAnimationFrame(tick);
+}
+function render() {
+  ["a", "b"].forEach((n, k) => {
+    $(`pad-${n}`).setAttribute("aria-pressed", String(playing === k));
+    $(`pad-${n}`).setAttribute("aria-label", `${playing === k ? "Stop" : "Play"} version ${n.toUpperCase()}`);
+    $(`hint-${n}`).textContent = playing === k ? "playing · tap to stop" : heard[k] ? "heard · tap to play" : "tap to play";
+  });
+  const ready = heard[0] && heard[1];
+  $("pick-a").disabled = $("pick-b").disabled = !ready;
+  $("pick-note").hidden = ready;
+  if (playing < 0) $("readout").textContent = "";
+}
+$("pad-a").addEventListener("click", () => play(0));
+$("pad-b").addEventListener("click", () => play(1));
+
+function pick(k) {
+  run.picks[run.order[run.i].id] = sides[k];
+  run.i++;
+  if (run.i < PAIRS.length) { showPair(); return; }
+  stop();
+  audio = [];
+  $("trial").hidden = true;
+  $("done").hidden = false;
+  $("code").textContent = `GF1.${run.device}.${PAIRS.map((p) => run.picks[p.id]).join("")}`;
+}
+$("pick-a").addEventListener("click", () => pick(0));
+$("pick-b").addEventListener("click", () => pick(1));
+
+$("copy").addEventListener("click", () => {
+  const code = $("code").textContent;
+  navigator.clipboard.writeText(code).then(
+    () => { $("copy").textContent = "Copied"; },
+    () => { getSelection().selectAllChildren($("code")); $("copy").textContent = "Selected: copy it with your keyboard or menu"; },
+  );
+});
+</script>

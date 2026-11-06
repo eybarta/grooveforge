@@ -14,6 +14,7 @@
     "expo-splash-screen": "~58.0.13",
     "expo-status-bar": "~58.0.4",
     "expo-system-ui": "~58.0.7",
+    "fflate": "^0.8.3",
     "gf-engine": "file:engine",
     "react": "19.3.0",
     "react-dom": "19.3.0",

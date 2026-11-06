@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { createAudioEngine } from "@/audio/engine";
-import { kitProgram, type Mood } from "@/audio/kit";
+import type { Mood } from "@/audio/kit";
 import { loadKit } from "@/audio/loadKit";
-import { LOUDNESS_TARGETS, masterTo, type LoudnessTarget } from "@/audio/master";
-import { DEFAULT_KNOBS, mixFor, type Knobs } from "@/audio/mix";
+import { LOUDNESS_TARGETS, type LoudnessTarget } from "@/audio/master";
+import { DEFAULT_KNOBS, type Knobs } from "@/audio/mix";
 import { saveWav } from "@/audio/saveWav";
+import { masterSong, studioProgram } from "@/audio/studioRender";
 import type { AudioEngine, EngineProgram, SessionMode } from "@/audio/types";
 import { encodeWav } from "@/audio/wav";
 import { LoopBeam } from "@/components/LoopBeam";
 import { boomBapDemo, trapDemo } from "@/song/demoGrooves";
-import { songToEngineEvents } from "@/song/time";
 
 const DEMOS: Record<Mood, () => ReturnType<typeof boomBapDemo>> = { boomBap: boomBapDemo, trap: trapDemo };
 const KNOB_STEPS = [0, 0.25, 0.5, 0.75, 1];
@@ -19,18 +19,12 @@ const EXPORT_LOOPS = 4; // the 2-bar demos → 8 bars
 const LIVE_LOOPS = 2; // enough to find the live gain quickly
 const r2 = (x: number) => Math.round(x * 100) / 100;
 
-/** Kit + mix for a mood, at the knob settings and master gain (the delay follows the demo's tempo). */
-const program = (m: Mood, knobs: Knobs, gainDb = 0): EngineProgram => ({
-  ...kitProgram(m),
-  mix: mixFor(m, knobs, DEMOS[m]().bpm, gainDb),
-});
+/** Kit + mix for a mood's demo, at the knob settings and master gain. */
+const program = (m: Mood, knobs: Knobs, gainDb = 0): EngineProgram => studioProgram(DEMOS[m](), knobs, gainDb);
 
-/** Renders `loops` passes of a mood's demo, mastered to a loudness target (render → measure → adjust). */
-function masterDemo(a: AudioEngine, m: Mood, knobs: Knobs, target: LoudnessTarget, loops: number) {
-  const song = DEMOS[m]();
-  const frames = loops * songToEngineEvents(song, a.sampleRate).loopFrames;
-  return masterTo(LOUDNESS_TARGETS[target], (g) => a.renderOffline(song, 0, frames, program(m, knobs, g)), (ch) => a.loudness(ch));
-}
+/** Renders `loops` passes of a mood's demo, mastered to a loudness target. */
+const masterDemo = (a: AudioEngine, m: Mood, knobs: Knobs, target: LoudnessTarget, loops: number) =>
+  masterSong(a, DEMOS[m](), knobs, target, loops);
 
 /** Phase 1 test bench for the studio sound (the real Studio UI is P3). Logs "[studio]" JSON like the spike. */
 export default function Studio() {

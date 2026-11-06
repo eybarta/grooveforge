@@ -36,3 +36,6 @@ npm-debug.*
 
 # kit build cache (downloaded CC0 sources)
 .cache/
+
+# P1 blind A/B set + answer key (the repo is public: keep the key out until the test is over)
+.ab/
