@@ -13,7 +13,7 @@ expo-env.d.ts
 .kotlin/
 
 # builds
-engine/build/
+engine/build*/
 public/gf-engine.wasm
 
 # secrets / signing

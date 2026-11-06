@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptySong, useSong } from "./store";
-import { noteTimeSec, songToEngineEvents, ENGINE_EVENT_STRIDE } from "./time";
+import { defaultInstruments, ENGINE_EVENT_STRIDE, ENGINE_INSTRUMENT_STRIDE, LANES, noteTimeSec, songToEngineEvents } from "./time";
 import { PPQ, type NoteEvent, type Song } from "./types";
 
 const note = (tick: number, offsetMs = 0, extra: Partial<NoteEvent> = {}): NoteEvent => ({
@@ -45,9 +45,20 @@ describe("songToEngineEvents", () => {
     expect(events[0]).toBe(24000); // the beat-2 kick
     expect(events[ENGINE_EVENT_STRIDE]).toBe(loopFrames - 480); // tick 0 played 10 ms early
   });
-  it("uses MIDI pitch when present", () => {
+  it("maps the lane to its instrument slot and uses MIDI pitch when present", () => {
     const p = songToEngineEvents(song({ tracks: [{ ...s.tracks[0]!, notes: [note(0, 0, { lane: "bass", pitch: 69 })] }] }), 48000);
-    expect(p.events[1]).toBeCloseTo(440, 3);
+    expect(p.events[1]).toBe(LANES.indexOf("bass"));
+    expect(p.events[3]).toBe(69);
+    expect(p.events[5]).toBe(-1); // no glide yet
+  });
+
+  it("gives every lane an instrument, with closed and open hat sharing a choke group", () => {
+    const inst = defaultInstruments();
+    expect(inst.length).toBe(LANES.length * ENGINE_INSTRUMENT_STRIDE);
+    const choke = (lane: (typeof LANES)[number]) => inst[LANES.indexOf(lane) * ENGINE_INSTRUMENT_STRIDE + 1];
+    expect(choke("hatClosed")).toBe(1);
+    expect(choke("hatOpen")).toBe(1);
+    expect(choke("kick")).toBe(-1);
   });
 });
 

@@ -11,8 +11,10 @@ export interface GfClock {
 
 /** JSI surface of the C++ GfEngineNodeHostObject (engine/rn/GfEngineNode.h). */
 export interface GfEngine {
-  /** Flat [frame, hz, velocity, durationFrames] rows; refused (false) while playing. */
-  setEvents(events: ArrayBuffer, loopFrames: number): boolean;
+  /** Flat [frame, instrument, velocity, note, durationFrames, glideNote] rows. Safe while playing (lock-free swap). */
+  setEvents(events: ArrayBuffer, loopFrames: number): void;
+  /** Flat [kind, chokeGroup, gain, pan] rows, indexed by the events' instrument field. */
+  setInstruments(instruments: ArrayBuffer): void;
   play(): void;
   stop(): void;
   setDrive(amount: number): void;

@@ -20,10 +20,10 @@ class GfEngineNode : public audioapi::AudioNode {
 
   Engine &engine() { return engine_; }
 
-  /** Mono in (mic, downmixed by the graph), mono out (upmixed by the destination). */
+  /** Stereo: the mic (mono, upmixed by the graph) arrives on channel 0; the engine writes L/R to channels 0/1. */
   static audioapi::AudioNodeOptions options() {
     audioapi::AudioNodeOptions o;
-    o.channelCount = 1;
+    o.channelCount = 2;
     o.channelCountMode = audioapi::ChannelCountMode::EXPLICIT;
     return o;
   }
@@ -33,10 +33,9 @@ class GfEngineNode : public audioapi::AudioNode {
   void processNode(int frames) override {
     auto buffer = getOutputBuffer();
     const size_t channels = buffer->getNumberOfChannels();
-    if (channels == 0) return;
-    float *x = buffer->getChannel(0)->begin();
-    engine_.process(x, x, frames);
-    for (size_t c = 1; c < channels; ++c) std::memcpy(buffer->getChannel(c)->begin(), x, frames * sizeof(float));
+    if (channels < 2) return;
+    float *l = buffer->getChannel(0)->begin();
+    engine_.process(l, l, buffer->getChannel(1)->begin(), frames);  // the engine reads mic[i] before writing l[i]
   }
 
  private:
@@ -75,9 +74,15 @@ class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
   JSI_HOST_FUNCTION_DECL(setEvents) {
     auto buffer = args[0].asObject(runtime).getArrayBuffer(runtime);
     const int rows = static_cast<int>(buffer.size(runtime) / (kEventStride * sizeof(float)));
-    const bool ok = engine_->setEvents(reinterpret_cast<const float *>(buffer.data(runtime)), rows,
-                                       static_cast<int64_t>(args[1].asNumber()));
-    return jsi::Value(ok);
+    engine_->setEvents(reinterpret_cast<const float *>(buffer.data(runtime)), rows,
+                       static_cast<int64_t>(args[1].asNumber()));
+    return jsi::Value::undefined();
+  }
+  JSI_HOST_FUNCTION_DECL(setInstruments) {
+    auto buffer = args[0].asObject(runtime).getArrayBuffer(runtime);
+    const int count = static_cast<int>(buffer.size(runtime) / (kInstrumentStride * sizeof(float)));
+    engine_->setInstruments(reinterpret_cast<const float *>(buffer.data(runtime)), count);
+    return jsi::Value::undefined();
   }
   JSI_HOST_FUNCTION_DECL(play) { engine_->play(); return jsi::Value::undefined(); }
   JSI_HOST_FUNCTION_DECL(stop) { engine_->stop(); return jsi::Value::undefined(); }
@@ -104,6 +109,7 @@ class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
       : audioapi::AudioNodeHostObject(graph, std::unique_ptr<audioapi::AudioNode>(node), GfEngineNode::options()),
         engine_(&node->engine()) {
     addFunctions(JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, setEvents),
+                 JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, setInstruments),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, play),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, stop),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, setDrive),

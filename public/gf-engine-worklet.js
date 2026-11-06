@@ -12,7 +12,8 @@ class GfEngineProcessor extends AudioWorkletProcessor {
     this.ex._initialize?.();
     this.e = this.ex.gf_create(sampleRate, captureSeconds);
     this.inPtr = this.ex.gf_alloc(BLOCK);
-    this.outPtr = this.ex.gf_alloc(BLOCK);
+    this.outL = this.ex.gf_alloc(BLOCK);
+    this.outR = this.ex.gf_alloc(BLOCK);
     this.port.onmessage = (m) => this.onMessage(m.data);
   }
 
@@ -29,7 +30,15 @@ class GfEngineProcessor extends AudioWorkletProcessor {
         const n = msg.events.length;
         const p = ex.gf_alloc(Math.max(1, n));
         this.heap(p, n).set(msg.events);
-        reply.ok = ex.gf_set_events(e, p, n / 4, msg.loopFrames) === 1;
+        ex.gf_set_events(e, p, n / 6, msg.loopFrames); // rows of 6 (kEventStride)
+        ex.gf_free(p);
+        break;
+      }
+      case "instruments": {
+        const n = msg.instruments.length;
+        const p = ex.gf_alloc(Math.max(1, n));
+        this.heap(p, n).set(msg.instruments);
+        ex.gf_set_instruments(e, p, n / 4); // rows of 4 (kInstrumentStride)
         ex.gf_free(p);
         break;
       }
@@ -61,9 +70,9 @@ class GfEngineProcessor extends AudioWorkletProcessor {
       this.announceStart = false;
       this.port.postMessage({ type: "clock", startFrame: currentFrame });
     }
-    this.ex.gf_process(this.e, this.inPtr, this.outPtr, n);
-    const y = this.heap(this.outPtr, n);
-    for (const ch of out) ch.set(y);
+    this.ex.gf_process(this.e, this.inPtr, this.outL, this.outR, n);
+    out[0].set(this.heap(this.outL, n));
+    if (out[1]) out[1].set(this.heap(this.outR, n));
     return true;
   }
 }

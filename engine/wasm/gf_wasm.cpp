@@ -8,10 +8,13 @@ void gf_destroy(gf::Engine* e) { delete e; }
 float* gf_alloc(int floats) { return new float[floats]; }
 void gf_free(float* p) { delete[] p; }
 
-void gf_process(gf::Engine* e, const float* in, float* out, int frames) { e->process(in, out, frames); }
-int gf_set_events(gf::Engine* e, const float* flat, int rows, double loopFrames) {
-  return e->setEvents(flat, rows, static_cast<int64_t>(loopFrames)) ? 1 : 0;
+void gf_process(gf::Engine* e, const float* in, float* outL, float* outR, int frames) {
+  e->process(in, outL, outR, frames);
 }
+void gf_set_events(gf::Engine* e, const float* flat, int rows, double loopFrames) {
+  e->setEvents(flat, rows, static_cast<int64_t>(loopFrames));
+}
+void gf_set_instruments(gf::Engine* e, const float* flat, int count) { e->setInstruments(flat, count); }
 void gf_play(gf::Engine* e) { e->play(); }
 void gf_stop(gf::Engine* e) { e->stop(); }
 void gf_set_drive(gf::Engine* e, float amount) { e->setDrive(amount); }

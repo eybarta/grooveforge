@@ -1,4 +1,4 @@
-import { songToEngineEvents } from "@/song/time";
+import { defaultInstruments, songToEngineEvents } from "@/song/time";
 import type { Song } from "@/song/types";
 import { CAPTURE_SECONDS, SAMPLE_RATE, type AudioClock, type SpikeAudio } from "./types";
 
@@ -10,7 +10,7 @@ async function engineNode(ctx: BaseAudioContext, wasmBytes: ArrayBuffer, onStart
   const node = new AudioWorkletNode(ctx, "gf-engine", {
     numberOfInputs: 1,
     numberOfOutputs: 1,
-    outputChannelCount: [1],
+    outputChannelCount: [2],
     processorOptions: { wasmBytes, captureSeconds: CAPTURE_SECONDS },
   });
   let nextId = 0;
@@ -28,8 +28,8 @@ async function engineNode(ctx: BaseAudioContext, wasmBytes: ArrayBuffer, onStart
     });
   const load = async (song: Song) => {
     const { events, loopFrames } = songToEngineEvents(song, ctx.sampleRate);
-    const r = await call({ type: "events", events, loopFrames });
-    if (!r.ok) throw new Error("engine refused events (still playing?)");
+    await call({ type: "instruments", instruments: defaultInstruments() });
+    await call({ type: "events", events, loopFrames });
     return loopFrames;
   };
   return { node, call, load };
@@ -116,7 +116,7 @@ export async function createSpikeAudio(): Promise<SpikeAudio> {
     },
     async renderOffline(song, drive) {
       const probe = songToEngineEvents(song, SAMPLE_RATE);
-      const off = new OfflineAudioContext(1, probe.loopFrames, SAMPLE_RATE);
+      const off = new OfflineAudioContext(2, probe.loopFrames, SAMPLE_RATE);
       const e = await engineNode(off, wasmBytes.slice(0));
       e.node.connect(off.destination);
       await e.load(song);

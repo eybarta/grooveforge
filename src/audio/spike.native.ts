@@ -1,13 +1,14 @@
 import { GfEngineNode } from "gf-engine";
 import { Platform } from "react-native";
 import { AudioContext, AudioManager, AudioRecorder, OfflineAudioContext } from "react-native-audio-api";
-import { songToEngineEvents } from "@/song/time";
+import { defaultInstruments, songToEngineEvents } from "@/song/time";
 import type { Song } from "@/song/types";
 import { CAPTURE_SECONDS, SAMPLE_RATE, type SpikeAudio } from "./types";
 
 function load(node: GfEngineNode, song: Song, sampleRate: number) {
   const { events, loopFrames } = songToEngineEvents(song, sampleRate);
-  if (!node.engine.setEvents(events.buffer as ArrayBuffer, loopFrames)) throw new Error("engine refused events (still playing?)");
+  node.engine.setInstruments(defaultInstruments().buffer as ArrayBuffer);
+  node.engine.setEvents(events.buffer as ArrayBuffer, loopFrames);
   return loopFrames;
 }
 
@@ -72,7 +73,7 @@ export async function createSpikeAudio(): Promise<SpikeAudio> {
     },
     async renderOffline(song, drive) {
       const { loopFrames } = songToEngineEvents(song, SAMPLE_RATE);
-      const off = new OfflineAudioContext({ numberOfChannels: 1, length: loopFrames, sampleRate: SAMPLE_RATE });
+      const off = new OfflineAudioContext({ numberOfChannels: 2, length: loopFrames, sampleRate: SAMPLE_RATE });
       const n = new GfEngineNode(off, 1);
       n.connect(off.destination);
       load(n, song, SAMPLE_RATE);

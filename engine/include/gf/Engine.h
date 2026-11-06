@@ -1,6 +1,6 @@
 #pragma once
-// GrooveForge audio engine: the one DSP core shared by iOS/Android (JSI node) and web (WASM AudioWorklet).
-// Plain C++20, no dependencies, no allocation or locks inside process().
+// GrooveForge audio engine: the one DSP core shared by iOS (JSI node) and web (WASM AudioWorklet).
+// Plain C++20. process() never allocates, frees or locks.
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -8,21 +8,43 @@
 
 namespace gf {
 
-/** One row of the flat event buffer built by songToEngineEvents() in src/song/time.ts. */
+/** Flat event row from songToEngineEvents() (src/song/time.ts): [frame, instrument, velocity, note, durationFrames, glideNote]. */
+constexpr int kEventStride = 6;
+/** Flat instrument row: [kind, chokeGroup, gain, pan]. */
+constexpr int kInstrumentStride = 4;
+constexpr int kMaxVoices = 32;
+
+enum class VoiceKind : uint8_t { Sine = 0 };
+
+struct Instrument {
+  VoiceKind kind = VoiceKind::Sine;
+  int chokeGroup = -1;  // a new note cuts every sounding voice in the same group (closed hat chokes open hat)
+  float gain = 1.f;
+  float pan = 0.f;      // −1 left … +1 right; 0 = unity on both channels
+};
+
 struct Event {
   int64_t frame;  // position inside the loop
-  float hz;
+  int instrument;
   float velocity;
+  float note;     // MIDI note (fractional allowed)
   int64_t durationFrames;
+  float glideNote;  // < 0: no glide
 };
-constexpr int kEventStride = 4;
+
+/** Everything the audio thread plays from. Immutable once published, so it can be swapped without locks. */
+struct Program {
+  std::vector<Event> events;  // sorted by frame
+  std::vector<Instrument> instruments;
+  int64_t loopFrames = 0;
+};
 
 /**
  * Lock-free transport state for readers on other threads (the UI-thread beam via a JSI host object).
  * Written by the audio thread once per block; shared_ptr so a reader can safely outlive the engine.
  */
 struct Clock {
-  std::atomic<int64_t> frame{0};       // frames processed since play()
+  std::atomic<int64_t> frame{0};  // frames processed since play()
   std::atomic<int64_t> loopFrames{0};
   std::atomic<bool> playing{false};
 };
@@ -30,45 +52,59 @@ struct Clock {
 class Engine {
  public:
   explicit Engine(float sampleRate, int captureSeconds = 30);
+  ~Engine();
+  Engine(const Engine&) = delete;
+  Engine& operator=(const Engine&) = delete;
 
-  /** Loads the loop. Events must be sorted by frame. Returns false (and ignores the call) while playing. */
-  bool setEvents(const float* flat, int rows, int64_t loopFrames);
-  void play();   // from loop start
+  // ---- control thread (JS / main). Safe while playing: changes land at the next audio block.
+  void setEvents(const float* flat, int rows, int64_t loopFrames);
+  void setInstruments(const float* flat, int count);
+  void play();  // from loop start
   void stop();
-  bool playing() const { return playing_.load(std::memory_order_relaxed); }
-
-  /** Drive effect amount, 0 = bypass … 1 = heavy tanh saturation. Safe to call from any thread. */
+  /** Drive effect amount, 0 = bypass … 1 = heavy tanh saturation. */
   void setDrive(float amount) { drive_.store(amount, std::memory_order_relaxed); }
-
-  /** Starts recording the mic input and the engine output side by side, stamped by the same frame clock. */
   void startCapture();
   void stopCapture() { capturing_.store(false, std::memory_order_release); }
   int captured() const { return captured_.load(std::memory_order_acquire); }
   const float* captureIn() const { return capIn_.data(); }
-  const float* captureOut() const { return capOut_.data(); }
-
-  /** Mono in (may be null = silence), mono out; in == out is allowed. Real-time safe. */
-  void process(const float* in, float* out, int frames);
-
-  int64_t frame() const { return frame_; }
+  const float* captureOut() const { return capOut_.data(); }  // left channel
   std::shared_ptr<const Clock> clock() const { return clock_; }
   float sampleRate() const { return sr_; }
 
+  // ---- audio thread. Mono in (null = silence), stereo out; in may alias outL.
+  void process(const float* in, float* outL, float* outR, int frames);
+
  private:
-  float renderVoice();
+  struct Voice {
+    bool active = false;
+    int instrument = 0;
+    int chokeGroup = -1;
+    float gainL = 0, gainR = 0;
+    double phase = 0, phaseInc = 0;
+    float amp = 0, decay = 0, attack = 0, fade = 1, fadeStep = 0;
+    int64_t left = 0;
+  };
+
+  void publish();                // control thread: copy staged_ and hand it to the audio thread
+  void adoptPending();           // audio thread
+  void trigger(const Event& e);  // audio thread
+  float renderVoice(Voice& v);   // audio thread
 
   float sr_;
-  std::vector<Event> events_;
-  int64_t loopFrames_ = 0;
-  int64_t frame_ = 0;  // frames since play()
-  size_t next_ = 0;    // next event index within the current loop pass
-  std::atomic<bool> playing_{false};
+
+  // control-thread copy that edits build on; never touched by the audio thread
+  Program staged_;
+  std::atomic<Program*> pending_{nullptr};  // published, not yet adopted (owned by whoever exchanges it out)
+  std::atomic<Program*> retired_{nullptr};  // adopted-then-replaced; freed by the control thread
+  Program* active_ = nullptr;               // audio thread only
+
+  std::atomic<bool> startRequested_{false}, stopRequested_{false};
+  bool playing_ = false;  // audio thread only
+  int64_t frame_ = 0;     // frames since play (audio thread only)
+  size_t next_ = 0;       // next event in active_ for the current loop pass
   std::atomic<float> drive_{0.f};
 
-  // the single voice: a sine "boop" with exponential decay, retriggered by every event
-  double phase_ = 0, phaseInc_ = 0;
-  float amp_ = 0, decay_ = 0, attack_ = 0;
-  int64_t voiceLeft_ = 0;
+  Voice voices_[kMaxVoices];
 
   std::vector<float> capIn_, capOut_;
   std::atomic<bool> capturing_{false};
