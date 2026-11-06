@@ -1,9 +1,18 @@
 import type { Song } from "@/song/types";
 
+/** The engine's transport clock, readable every frame from the UI thread (worklets) without touching React state. */
+export interface AudioClock {
+  /** Engine frames processed since play(): ahead of what's audible by the output latency. */
+  readonly frame: number;
+  readonly loopFrames: number;
+  readonly playing: boolean;
+}
+
 /** What the spike screen needs from each platform (spike.web.ts: Web Audio + WASM, spike.native.ts: audio-api + JSI). */
 export interface SpikeAudio {
   platform: string;
   sampleRate: number;
+  clock: AudioClock;
   /** Loads a Song into the engine (only while stopped). */
   setSong(song: Song): Promise<void>;
   /** Opens the mic (processing off) and starts the loop from bar 1. */

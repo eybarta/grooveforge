@@ -1,5 +1,5 @@
 // AudioWorklet host for the C++ engine (public/gf-engine.wasm). Same engine as the native JSI node.
-/* global AudioWorkletProcessor, registerProcessor, sampleRate */
+/* global AudioWorkletProcessor, registerProcessor, sampleRate, currentFrame */
 const BLOCK = 128;
 
 class GfEngineProcessor extends AudioWorkletProcessor {
@@ -33,7 +33,7 @@ class GfEngineProcessor extends AudioWorkletProcessor {
         ex.gf_free(p);
         break;
       }
-      case "play": ex.gf_play(e); break;
+      case "play": ex.gf_play(e); this.announceStart = true; break;
       case "stop": ex.gf_stop(e); break;
       case "drive": ex.gf_set_drive(e, msg.amount); break;
       case "captureStart": ex.gf_capture_start(e); break;
@@ -56,6 +56,11 @@ class GfEngineProcessor extends AudioWorkletProcessor {
     const mic = inputs[0] && inputs[0][0];
     const inBuf = this.heap(this.inPtr, n);
     if (mic) inBuf.set(mic); else inBuf.fill(0);
+    if (this.announceStart) {
+      // the engine's frame 0 is the first frame of this block: the main thread maps it onto the context clock
+      this.announceStart = false;
+      this.port.postMessage({ type: "clock", startFrame: currentFrame });
+    }
     this.ex.gf_process(this.e, this.inPtr, this.outPtr, n);
     const y = this.heap(this.outPtr, n);
     for (const ch of out) ch.set(y);

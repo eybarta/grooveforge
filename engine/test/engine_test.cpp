@@ -73,6 +73,19 @@ int main() {
   assert(c.captured() == kLoop);
   for (int i = 0; i < 1000; ++i) assert(c.captureIn()[kLag + i] == c.captureOut()[i]);
 
+  // clock: readers see the frames processed since play() and the loop length, and play/stop state
+  {
+    gf::Engine k(kSr);
+    auto clock = k.clock();
+    k.setEvents(ev.data(), rows, kLoop);
+    assert(clock->loopFrames.load() == kLoop && !clock->playing.load());
+    k.play();
+    render(k, 1000);
+    assert(clock->playing.load() && clock->frame.load() == 1000);
+    k.stop();
+    assert(!clock->playing.load());
+  }
+
   // in-place processing (react-native-audio-api hands nodes one buffer for input and output)
   gf::Engine ip(kSr);
   ip.setEvents(ev.data(), rows, kLoop);

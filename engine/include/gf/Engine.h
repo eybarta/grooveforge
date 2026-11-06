@@ -3,6 +3,7 @@
 // Plain C++20, no dependencies, no allocation or locks inside process().
 #include <atomic>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace gf {
@@ -15,6 +16,16 @@ struct Event {
   int64_t durationFrames;
 };
 constexpr int kEventStride = 4;
+
+/**
+ * Lock-free transport state for readers on other threads (the UI-thread beam via a JSI host object).
+ * Written by the audio thread once per block; shared_ptr so a reader can safely outlive the engine.
+ */
+struct Clock {
+  std::atomic<int64_t> frame{0};       // frames processed since play()
+  std::atomic<int64_t> loopFrames{0};
+  std::atomic<bool> playing{false};
+};
 
 class Engine {
  public:
@@ -40,6 +51,7 @@ class Engine {
   void process(const float* in, float* out, int frames);
 
   int64_t frame() const { return frame_; }
+  std::shared_ptr<const Clock> clock() const { return clock_; }
   float sampleRate() const { return sr_; }
 
  private:
@@ -61,6 +73,8 @@ class Engine {
   std::vector<float> capIn_, capOut_;
   std::atomic<bool> capturing_{false};
   std::atomic<int> captured_{0};
+
+  std::shared_ptr<Clock> clock_ = std::make_shared<Clock>();
 };
 
 }  // namespace gf

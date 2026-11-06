@@ -43,6 +43,30 @@ class GfEngineNode : public audioapi::AudioNode {
   Engine engine_;
 };
 
+/**
+ * Read-only view of the engine clock for the UI thread. A worklet that captures this object gets the same C++
+ * instance re-wrapped on the UI runtime, so every `frame` read is a direct atomic load (no JS thread, no locks).
+ */
+class GfClockHostObject : public jsi::HostObject {
+ public:
+  explicit GfClockHostObject(std::shared_ptr<const Clock> clock) : clock_(std::move(clock)) {}
+
+  jsi::Value get(jsi::Runtime &rt, const jsi::PropNameID &name) override {
+    const auto prop = name.utf8(rt);
+    if (prop == "frame") return jsi::Value(static_cast<double>(clock_->frame.load(std::memory_order_relaxed)));
+    if (prop == "loopFrames") return jsi::Value(static_cast<double>(clock_->loopFrames.load(std::memory_order_relaxed)));
+    if (prop == "playing") return jsi::Value(clock_->playing.load(std::memory_order_relaxed));
+    return jsi::Value::undefined();
+  }
+
+  std::vector<jsi::PropNameID> getPropertyNames(jsi::Runtime &rt) override {
+    return jsi::PropNameID::names(rt, "frame", "loopFrames", "playing");
+  }
+
+ private:
+  std::shared_ptr<const Clock> clock_;
+};
+
 class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
  public:
   GfEngineNodeHostObject(const std::shared_ptr<audioapi::BaseAudioContext> &context, int captureSeconds)
@@ -60,6 +84,9 @@ class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
   JSI_HOST_FUNCTION_DECL(setDrive) {
     engine_->setDrive(static_cast<float>(args[0].asNumber()));
     return jsi::Value::undefined();
+  }
+  JSI_HOST_FUNCTION_DECL(clock) {
+    return jsi::Object::createFromHostObject(runtime, std::make_shared<GfClockHostObject>(engine_->clock()));
   }
   JSI_HOST_FUNCTION_DECL(captureStart) { engine_->startCapture(); return jsi::Value::undefined(); }
   JSI_HOST_FUNCTION_DECL(captureStop) {
@@ -80,6 +107,7 @@ class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, play),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, stop),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, setDrive),
+                 JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, clock),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, captureStart),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, captureStop));
   }

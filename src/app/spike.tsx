@@ -8,6 +8,7 @@ import { calibrate, mixTakeWithLoop, takeLevel, verifyAlignment } from "@/audio/
 import { HOST_REFERENCE, loopSong } from "@/audio/spikeSongs";
 import type { SpikeAudio } from "@/audio/types";
 import { encodeWav, fingerprint } from "@/audio/wav";
+import { LoopBeam } from "@/components/LoopBeam";
 
 type Route = "wired" | "bluetooth" | "speaker";
 const SOAK_SEC = 60;
@@ -156,10 +157,26 @@ export default function Spike() {
       <Btn label="Save last take" onPress={saveTake} busy={busy} disabled={!take} />
       <Btn label="Stop" onPress={stop} busy={null} disabled={!audio} />
 
+      {audio && (
+        <LoopBeam
+          clock={audio.clock}
+          latencyFrames={outputLatencyFrames(audio, rtlMs)}
+          sampleRate={audio.sampleRate}
+          onStats={(st) => report("clock", st)}
+        />
+      )}
+
       {busy && <Text style={s.busy}>{busy}…</Text>}
       {log.map((l, i) => <Text key={i} style={s.log}>{l}</Text>)}
     </ScrollView>
   );
+}
+
+/** What the listener hears lags the engine by the output latency: measured (RTL − reported input) once calibrated. */
+function outputLatencyFrames(a: SpikeAudio, rtlMs: number | null) {
+  const r = a.reportedLatency();
+  const sec = rtlMs !== null ? rtlMs / 1000 - (r.inputLatency || 0) : (r.outputLatency || 0) + (r.baseLatency || 0);
+  return sec * a.sampleRate;
 }
 
 function Btn({ label, onPress, busy, disabled }: { label: string; onPress: () => void; busy: string | null; disabled: boolean }) {

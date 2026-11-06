@@ -19,6 +19,7 @@ bool Engine::setEvents(const float* flat, int rows, int64_t loopFrames) {
     events_.push_back({static_cast<int64_t>(r[0]), r[1], r[2], static_cast<int64_t>(r[3])});
   }
   loopFrames_ = loopFrames;
+  clock_->loopFrames.store(loopFrames, std::memory_order_relaxed);
   return true;
 }
 
@@ -26,10 +27,15 @@ void Engine::play() {
   frame_ = 0;
   next_ = 0;
   voiceLeft_ = 0;
+  clock_->frame.store(0, std::memory_order_relaxed);
+  clock_->playing.store(true, std::memory_order_relaxed);
   playing_.store(true, std::memory_order_release);
 }
 
-void Engine::stop() { playing_.store(false, std::memory_order_release); }
+void Engine::stop() {
+  playing_.store(false, std::memory_order_release);
+  clock_->playing.store(false, std::memory_order_relaxed);
+}
 
 void Engine::startCapture() {
   captured_.store(0, std::memory_order_release);
@@ -83,6 +89,7 @@ void Engine::process(const float* in, float* out, int frames) {
     }
   }
   captured_.store(c, std::memory_order_release);
+  if (play) clock_->frame.store(frame_, std::memory_order_relaxed);
 }
 
 }  // namespace gf

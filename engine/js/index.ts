@@ -1,6 +1,14 @@
 import { AudioNode, type BaseAudioContext } from "react-native-audio-api";
 import NativeGfEngineModule from "./specs/NativeGfEngineModule";
 
+/** Lock-free engine clock (C++ host object). Safe to capture in a UI-thread worklet: reads are atomic loads. */
+export interface GfClock {
+  /** Frames processed since play(); ahead of what's audible by the output latency. */
+  readonly frame: number;
+  readonly loopFrames: number;
+  readonly playing: boolean;
+}
+
 /** JSI surface of the C++ GfEngineNodeHostObject (engine/rn/GfEngineNode.h). */
 export interface GfEngine {
   /** Flat [frame, hz, velocity, durationFrames] rows; refused (false) while playing. */
@@ -8,6 +16,7 @@ export interface GfEngine {
   play(): void;
   stop(): void;
   setDrive(amount: number): void;
+  clock(): GfClock;
   captureStart(): void;
   captureStop(): { input: ArrayBuffer; output: ArrayBuffer };
 }

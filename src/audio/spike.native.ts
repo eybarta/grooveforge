@@ -30,6 +30,7 @@ export async function createSpikeAudio(): Promise<SpikeAudio> {
   return {
     platform: `${Platform.OS} ${Platform.Version} (react-native-audio-api 1.0.0)`,
     sampleRate: ctx.sampleRate,
+    clock: node.engine.clock(),
     setSong: async (song) => void load(node, song, ctx.sampleRate),
     async start() {
       if (!recorder.isRecording()) {

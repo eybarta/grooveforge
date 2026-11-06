@@ -1,11 +1,11 @@
 import { songToEngineEvents } from "@/song/time";
 import type { Song } from "@/song/types";
-import { CAPTURE_SECONDS, SAMPLE_RATE, type SpikeAudio } from "./types";
+import { CAPTURE_SECONDS, SAMPLE_RATE, type AudioClock, type SpikeAudio } from "./types";
 
 type Msg = { type: string; [k: string]: unknown };
 
 /** One gf-engine AudioWorkletNode with a request/reply wrapper around its port. */
-async function engineNode(ctx: BaseAudioContext, wasmBytes: ArrayBuffer) {
+async function engineNode(ctx: BaseAudioContext, wasmBytes: ArrayBuffer, onStart?: (startFrame: number) => void) {
   await ctx.audioWorklet.addModule("/gf-engine-worklet.js");
   const node = new AudioWorkletNode(ctx, "gf-engine", {
     numberOfInputs: 1,
@@ -16,6 +16,7 @@ async function engineNode(ctx: BaseAudioContext, wasmBytes: ArrayBuffer) {
   let nextId = 0;
   const pending = new Map<number, (data: any) => void>();
   node.port.onmessage = (m) => {
+    if (m.data.type === "clock") return onStart?.(m.data.startFrame);
     pending.get(m.data.id)?.(m.data);
     pending.delete(m.data.id);
   };
@@ -34,10 +35,34 @@ async function engineNode(ctx: BaseAudioContext, wasmBytes: ArrayBuffer) {
   return { node, call, load };
 }
 
+/**
+ * Web clock in the same units as the native one (engine frames since play). The worklet reports the context frame
+ * where play began; the audible context time comes from getOutputTimestamp(), interpolated with performance.now()
+ * between audio callbacks, plus the browser's reported latency to get back to "processed" frames.
+ */
+function webClock(ctx: AudioContext) {
+  const state = { startFrame: 0, loopFrames: 0, playing: false };
+  const clock: AudioClock = {
+    get frame() {
+      if (!state.playing) return 0;
+      const ts = ctx.getOutputTimestamp();
+      const audible = (ts.contextTime ?? ctx.currentTime) + (performance.now() - (ts.performanceTime ?? performance.now())) / 1000;
+      return (audible + ctx.baseLatency + (ctx.outputLatency ?? 0)) * ctx.sampleRate - state.startFrame;
+    },
+    get loopFrames() { return state.loopFrames; },
+    get playing() { return state.playing; },
+  };
+  return { clock, state };
+}
+
 export async function createSpikeAudio(): Promise<SpikeAudio> {
   const wasmBytes = await (await fetch("/gf-engine.wasm")).arrayBuffer();
   const ctx = new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: "interactive" });
-  const engine = await engineNode(ctx, wasmBytes.slice(0));
+  const { clock, state: clockState } = webClock(ctx);
+  const engine = await engineNode(ctx, wasmBytes.slice(0), (startFrame) => {
+    clockState.startFrame = startFrame;
+    clockState.playing = true;
+  });
   engine.node.connect(ctx.destination);
   let mic: MediaStream | null = null;
   let playback: ReturnType<typeof ctx.createBufferSource> | null = null; // Stop also cuts take playback
@@ -45,7 +70,8 @@ export async function createSpikeAudio(): Promise<SpikeAudio> {
   return {
     platform: `web (${navigator.userAgent.match(/(Chrome|Firefox|Safari)\/[\d.]+/)?.[0] ?? "browser"})`,
     sampleRate: ctx.sampleRate,
-    setSong: async (song) => void (await engine.load(song)),
+    clock,
+    setSong: async (song) => void (clockState.loopFrames = await engine.load(song)),
     async start() {
       if (!mic) {
         // CLAUDE.md: mic capture with echo cancellation, noise suppression and auto gain OFF
@@ -60,6 +86,7 @@ export async function createSpikeAudio(): Promise<SpikeAudio> {
     async stop() {
       playback?.stop();
       playback = null;
+      clockState.playing = false;
       await engine.call({ type: "stop" });
     },
     setDrive: (amount) => void engine.call({ type: "drive", amount }),
