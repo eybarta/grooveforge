@@ -33,3 +33,6 @@ npm-debug.*
 *.log
 .DS_Store
 .serena/
+
+# kit build cache (downloaded CC0 sources)
+.cache/

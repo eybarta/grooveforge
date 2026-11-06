@@ -1,0 +1,191 @@
+{
+  "version": 1,
+  "sampleRate": 48000,
+  "moods": {
+    "boomBap": {
+      "kick": "kick_dusty",
+      "snare": "snare_dusty",
+      "hatClosed": "hat_closed_dusty",
+      "hatOpen": "hat_open_dusty",
+      "perc": "shaker"
+    },
+    "trap": {
+      "kick": "kick_trap",
+      "snare": "clap",
+      "hatClosed": "hat_trap",
+      "hatOpen": "hat_open_dusty",
+      "perc": "snap"
+    }
+  },
+  "pieces": {
+    "kick_dusty": {
+      "gain": 2.8137,
+      "chokeGroup": -1,
+      "layers": [
+        {
+          "maxVelocity": 0.333,
+          "files": [
+            "kick_dusty_v1_rr1.flac",
+            "kick_dusty_v1_rr2.flac"
+          ]
+        },
+        {
+          "maxVelocity": 0.667,
+          "files": [
+            "kick_dusty_v2_rr1.flac",
+            "kick_dusty_v2_rr2.flac"
+          ]
+        },
+        {
+          "maxVelocity": 1,
+          "files": [
+            "kick_dusty_v3_rr1.flac",
+            "kick_dusty_v3_rr2.flac"
+          ]
+        }
+      ]
+    },
+    "snare_dusty": {
+      "gain": 2.8277,
+      "chokeGroup": -1,
+      "layers": [
+        {
+          "maxVelocity": 0.333,
+          "files": [
+            "snare_dusty_v1_rr1.flac",
+            "snare_dusty_v1_rr2.flac"
+          ]
+        },
+        {
+          "maxVelocity": 0.667,
+          "files": [
+            "snare_dusty_v2_rr1.flac",
+            "snare_dusty_v2_rr2.flac"
+          ]
+        },
+        {
+          "maxVelocity": 1,
+          "files": [
+            "snare_dusty_v3_rr1.flac",
+            "snare_dusty_v3_rr2.flac"
+          ]
+        }
+      ]
+    },
+    "hat_closed_dusty": {
+      "gain": 34.1926,
+      "chokeGroup": 1,
+      "layers": [
+        {
+          "maxVelocity": 0.333,
+          "files": [
+            "hat_closed_dusty_v1_rr1.flac",
+            "hat_closed_dusty_v1_rr2.flac"
+          ]
+        },
+        {
+          "maxVelocity": 0.667,
+          "files": [
+            "hat_closed_dusty_v2_rr1.flac",
+            "hat_closed_dusty_v2_rr2.flac"
+          ]
+        },
+        {
+          "maxVelocity": 1,
+          "files": [
+            "hat_closed_dusty_v3_rr1.flac",
+            "hat_closed_dusty_v3_rr2.flac"
+          ]
+        }
+      ]
+    },
+    "hat_open_dusty": {
+      "gain": 15.1376,
+      "chokeGroup": 1,
+      "layers": [
+        {
+          "maxVelocity": 0.5,
+          "files": [
+            "hat_open_dusty_v1_rr1.flac"
+          ]
+        },
+        {
+          "maxVelocity": 1,
+          "files": [
+            "hat_open_dusty_v2_rr1.flac"
+          ]
+        }
+      ]
+    },
+    "clap": {
+      "gain": 1.0787,
+      "chokeGroup": -1,
+      "layers": [
+        {
+          "maxVelocity": 1,
+          "files": [
+            "clap_v1_rr1.flac",
+            "clap_v1_rr2.flac",
+            "clap_v1_rr3.flac",
+            "clap_v1_rr4.flac",
+            "clap_v1_rr5.flac",
+            "clap_v1_rr6.flac"
+          ]
+        }
+      ]
+    },
+    "shaker": {
+      "gain": 26.3259,
+      "chokeGroup": -1,
+      "layers": [
+        {
+          "maxVelocity": 1,
+          "files": [
+            "shaker_v1_rr1.flac",
+            "shaker_v1_rr2.flac",
+            "shaker_v1_rr3.flac",
+            "shaker_v1_rr4.flac"
+          ]
+        }
+      ]
+    },
+    "kick_trap": {
+      "gain": 0.9163,
+      "chokeGroup": -1,
+      "layers": [
+        {
+          "maxVelocity": 1,
+          "files": [
+            "kick_trap_v1_rr1.flac"
+          ]
+        }
+      ]
+    },
+    "hat_trap": {
+      "gain": 1.1395,
+      "chokeGroup": 1,
+      "layers": [
+        {
+          "maxVelocity": 1,
+          "files": [
+            "hat_trap_v1_rr1.flac",
+            "hat_trap_v1_rr2.flac"
+          ]
+        }
+      ]
+    },
+    "snap": {
+      "gain": 0.89,
+      "chokeGroup": -1,
+      "layers": [
+        {
+          "maxVelocity": 1,
+          "files": [
+            "snap_v1_rr1.flac",
+            "snap_v1_rr2.flac"
+          ]
+        }
+      ]
+    }
+  }
+}
