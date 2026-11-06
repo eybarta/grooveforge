@@ -13,7 +13,7 @@ Expo SDK 58 (RN 0.88.1, New Architecture) · react-native-audio-api **1.0.0** (p
 | Requirement | Web (Chrome 156, Mac) | iPhone 16 Pro, iOS 27.2 | Android |
 | --- | --- | --- | --- |
 | C++ engine plays one voice | ✅ worklet + WASM | ✅ on device | written, not built (step 11) |
-| Custom C++ DSP effect (Drive) | ✅ changes output (mean abs 0.038 → 0.217 at drive 1) | ✅ in the JSI node; audible A/B pending your ears | — |
+| Custom C++ DSP effect (Drive) | ✅ changes output (mean abs 0.038 → 0.217 at drive 1) | ✅ live on device: switching 0 ↔ 1 audibly goes clean ↔ fuzzy/louder (confirmed by ear) | — |
 | Offline render → 48 kHz WAV | ✅ 256 000 frames, **bit-matches host render**, 15 ms | ✅ audio-api `OfflineAudioContext`: **matches host**, 64 ms | — |
 | Loop plays while recording | pending (needs mic permission + you) | ✅ speaker + Bluetooth: callback real time (ratio 0.999–0.9998 over 25 s) | — |
 | Round-trip latency measured + take shifted | pending | ✅ speaker **≈ 17.0 ms**, residual 0–0.4 ms · ✅ Bluetooth **366–369 ms**, residual 0.94 ms; shifted take sounds in time by ear | — |
