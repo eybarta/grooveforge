@@ -32,6 +32,8 @@ Pod::Spec.new do |s|
       '"$(PODS_ROOT)/../build/generated/ios/ReactCodegen"',
     ].join(" "),
     "CLANG_CXX_LANGUAGE_STANDARD" => "c++20",
+    # DSP is always optimised: Debug's -O0 rendered 2.6× realtime vs 30× in WASM -O3, and risks live dropouts
+    "GCC_OPTIMIZATION_LEVEL" => "3",
   }
 
   install_modules_dependencies(s)

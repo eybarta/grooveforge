@@ -58,8 +58,13 @@ export default function Studio() {
       await a.setProgram(program("boomBap", DEFAULT_KNOBS));
       await a.setSong(boomBapDemo());
       console.log("[studio]", JSON.stringify({ step: "kit loaded", platform: a.platform, ...kit }));
-      setStatus(`kit loaded: ${kit.files} samples in ${kit.ms} ms · mastering check…`);
-      // the P1 export bar, measured on this platform: each mood × target, 8 bars, within ± 0.5 LU and ≤ −1 dBTP
+      const live = await masterDemo(a, "boomBap", DEFAULT_KNOBS, "streaming", LIVE_LOOPS);
+      gainDb.current = live.gainDb;
+      await a.setProgram(program("boomBap", DEFAULT_KNOBS, live.gainDb));
+      setStatus(`kit loaded: ${kit.files} samples in ${kit.ms} ms`);
+      setAudio(a);
+      // the P1 export bar, measured on this platform in the background (logs only; playing works meanwhile):
+      // each mood × target, 8 bars, within ± 0.5 LU and ≤ −1 dBTP
       for (const m of ["boomBap", "trap"] as const)
         for (const t of ["streaming", "club"] as const) {
           const t0 = performance.now();
@@ -69,11 +74,6 @@ export default function Studio() {
           const realtime = Math.round(((r.renders * r.channels[0]!.length) / a.sampleRate / (ms / 1000)) * 10) / 10;
           console.log("[studio]", JSON.stringify({ step: "master check", platform: a.platform, mood: m, target: t, lufs: r2(r.lufs), truePeakDb: r2(r.truePeakDb), gainDb: r2(r.gainDb), renders: r.renders, ok: r.ok, ms, realtime }));
         }
-      setStatus(`kit loaded: ${kit.files} samples in ${kit.ms} ms`);
-      const live = await masterDemo(a, "boomBap", DEFAULT_KNOBS, "streaming", LIVE_LOOPS);
-      gainDb.current = live.gainDb;
-      await a.setProgram(program("boomBap", DEFAULT_KNOBS, live.gainDb));
-      setAudio(a);
     })().catch((e) => setStatus(`init failed: ${e}`));
     return () => void created?.close();
   }, []);
