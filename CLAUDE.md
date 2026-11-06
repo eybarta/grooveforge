@@ -21,7 +21,8 @@ v1 ships ONE flavor: **Hip-hop**, with a **Boom Bap ⇄ Trap** switch.
 - ML: **onnxruntime** (react-native + web). Core ML acceleration is a later optimisation.
 - State: **zustand**. One `Song` store is the single source of truth.
 - v1 = record → process → edit. Live real-time transformation ("monitor mode") is out of scope for v1.
-- Samples: Eyal has budget for a commissioned/licensed hip-hop kit. Until it arrives use free kits with redistribution rights only (AVL Drumkits, CC BY-SA; CC0 sounds). Never ship a sample without a licence that allows bundling it in an app; log every sample source in `assets/kits/LICENSES.md`.
+- Samples: Eyal has budget for a commissioned/licensed hip-hop kit. Until it arrives use **CC0 sounds only** (e.g. Gogodze Phu Vol II, VCSL, Sonic Pi samples). The 808 is synthesised by our engine. No CC BY-SA (e.g. AVL Drumkits): its no-technical-restrictions clause conflicts with App Store DRM (decided 2026-11-06). Never ship a sample without a licence that allows bundling it in an app; log every sample source in `assets/kits/LICENSES.md`.
+- Export formats: WAV 24-bit now; AAC/M4A with the P5 share/export work. No MP3: every MP3 encoder is LGPL (decided 2026-11-06).
 
 ## Architecture rules
 - `Song → Track → NoteEvent {tick, lane, velocity, offsetMs, source}` — hits keep their original timing offset (the user's feel); quantize is a blend knob, not destructive.

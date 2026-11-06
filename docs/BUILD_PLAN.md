@@ -36,7 +36,7 @@ Keep as reference only: the scheduler idea, `EditMap` (user overrides on top of 
    Extras: octave ±, Harmonize (3rds/5ths), Arp, re-sing a bar.
 10. **Render** — sampler with velocity layers + round-robin; Hip-hop kit: kick (punch+sub), snare, clap, closed/open hat, rim, shaker, 808 (tuned, glide, saturation). Boom Bap: dusty, swing 55–62 %. Trap: tight, 1/32 hat rolls from fast "ts-ts-ts", long 808. Synth: 2-osc subtractive/wavetable + filter env + unison + chorus + tape sat; 1–2 sampled instruments (Rhodes, piano). 6–8 presets.
 11. **Mix** — per-lane HPF/EQ, transient shaper, 4× oversampled saturation, pan; drum-bus glue, parallel bus, IR reverb send, tempo delay.
-12. **Master/export** — true-peak limiter (−1 dBTP), BS.1770 LUFS (Streaming −14 / Club −9); WAV 24-bit, MP3 320, stems, MIDI, 9:16 video.
+12. **Master/export** — true-peak limiter (−1 dBTP), BS.1770 LUFS (Streaming −14 / Club −9); WAV 24-bit, AAC/M4A (P5; no MP3, every encoder is LGPL), stems, MIDI, 9:16 video.
 13. **Optional AI "Studio Polish"** (later) — server proxy (e.g. Stable Audio 2.5 on fal), result added as an extra layer, never replacing the beat; per-user cap.
 
 ## UX flow (see docs/design + docs/motion)
@@ -54,7 +54,7 @@ Record (audio-reactive orb, count-in rings, live sparks per hit) → **Forge tra
 - [ ] **First: audio clock → UI thread.** The engine's frame counter must be readable from Reanimated UI worklets (shared value) on iOS and web; demo a beam locked to the loop at 60 fps. This is the biggest unknown left after P0.
 - [ ] Engine: lock-free event swap so the Song can change while it plays (live editing; P0's `setEvents` refuses while playing).
 - [ ] Sampler (velocity layers, round-robin), kit `manifest.json`, placeholder hip-hop kit (licence-checked).
-- [ ] 808 voice (tuned sample, glide, saturation); mix chain; master (limiter + LUFS); WAV/MP3 export.
+- [ ] 808 voice (synthesised by the engine: tuned, glide, saturation); mix chain; master (limiter + LUFS); WAV export (AAC/M4A in P5).
 - **Gate:** ≥ 80 % prefer v2 in a blind A/B vs POC (20 listeners); export within ± 0.5 LU.
 
 ### P2 · Accurate ears (weeks 4–6)
