@@ -80,8 +80,8 @@ class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
   }
   JSI_HOST_FUNCTION_DECL(setInstruments) {
     auto buffer = args[0].asObject(runtime).getArrayBuffer(runtime);
-    const int count = static_cast<int>(buffer.size(runtime) / (kInstrumentStride * sizeof(float)));
-    engine_->setInstruments(reinterpret_cast<const float *>(buffer.data(runtime)), count);
+    const int instruments = static_cast<int>(buffer.size(runtime) / (kInstrumentStride * sizeof(float)));
+    engine_->setInstruments(reinterpret_cast<const float *>(buffer.data(runtime)), instruments);
     return jsi::Value::undefined();
   }
   JSI_HOST_FUNCTION_DECL(play) { engine_->play(); return jsi::Value::undefined(); }
