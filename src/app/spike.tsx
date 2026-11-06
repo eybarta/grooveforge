@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { alignTake } from "@/audio/latency";
 import { saveWav } from "@/audio/saveWav";
 import { createSpikeAudio } from "@/audio/spike";
-import { calibrate, mixTakeWithLoop, verifyAlignment } from "@/audio/spikeRuns";
+import { calibrate, mixTakeWithLoop, takeLevel, verifyAlignment } from "@/audio/spikeRuns";
 import { HOST_REFERENCE, loopSong } from "@/audio/spikeSongs";
 import type { SpikeAudio } from "@/audio/types";
 import { encodeWav, fingerprint } from "@/audio/wav";
@@ -55,7 +55,7 @@ export default function Spike() {
     const { input, output } = await a.captureStop();
     const elapsed = (Date.now() - t0) / 1000;
     // the audio callback should process frames at the sample rate; a stalled callback shows up as a ratio < 1
-    report("soak capture", { capturedSec: input.length / a.sampleRate, wallSec: elapsed, ratio: input.length / a.sampleRate / elapsed });
+    report("soak capture", { capturedSec: input.length / a.sampleRate, wallSec: elapsed, ratio: input.length / a.sampleRate / elapsed, take: takeLevel(input) });
     setTake({ input, output });
     await new Promise((r) => setTimeout(r, (SOAK_SEC - SOAK_CAPTURE_SEC) * 1000));
     await a.stop();

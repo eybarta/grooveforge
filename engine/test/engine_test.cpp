@@ -25,14 +25,18 @@ float peak(const std::vector<float>& v, size_t a, size_t b) {
 }  // namespace
 
 int main() {
-  // one boop on every beat: 8 beats in 2 bars
+  // the spike loop (src/audio/spikeSongs.ts loopSong): a 55 Hz boop on every beat + a 2.4 kHz hat on each off-beat 8th
   std::vector<float> ev;
-  for (int b = 0; b < 8; ++b) ev.insert(ev.end(), {b * 32000.f, 55.f, 0.8f, 12000.f});
+  for (int b = 0; b < 8; ++b) {
+    ev.insert(ev.end(), {b * 32000.f, 55.f, 0.8f, 12000.f});
+    ev.insert(ev.end(), {b * 32000.f + 16000.f, 2400.f, 0.5f, 1920.f});
+  }
+  const int rows = static_cast<int>(ev.size() / gf::kEventStride);
 
   gf::Engine e(kSr);
-  assert(e.setEvents(ev.data(), 8, kLoop));
+  assert(e.setEvents(ev.data(), rows, kLoop));
   e.play();
-  assert(!e.setEvents(ev.data(), 8, kLoop) && "setEvents must refuse while playing");
+  assert(!e.setEvents(ev.data(), rows, kLoop) && "setEvents must refuse while playing");
   const auto two = render(e, 2 * kLoop);
 
   // the voice sounds on the beat and is silent just before the next one
@@ -43,7 +47,7 @@ int main() {
 
   // Drive: same input, louder RMS once saturated, never above 1
   gf::Engine d(kSr);
-  d.setEvents(ev.data(), 8, kLoop);
+  d.setEvents(ev.data(), rows, kLoop);
   d.setDrive(1.f);
   d.play();
   const auto driven = render(d, kLoop);
@@ -55,13 +59,13 @@ int main() {
   // capture: input and output share one frame clock, so a loopback delayed by L frames shows up L frames later
   constexpr int kLag = 1234;
   gf::Engine c(kSr);
-  c.setEvents(ev.data(), 8, kLoop);
+  c.setEvents(ev.data(), rows, kLoop);
   c.play();
   c.startCapture();
   std::vector<float> loopIn(kLoop, 0.f);
   // feed the engine its own (known) output delayed by kLag: render once with a probe to know the output
   gf::Engine probe(kSr);
-  probe.setEvents(ev.data(), 8, kLoop);
+  probe.setEvents(ev.data(), rows, kLoop);
   probe.play();
   const auto expected = render(probe, kLoop);
   for (int64_t i = kLag; i < kLoop; ++i) loopIn[i] = expected[i - kLag];
@@ -71,7 +75,7 @@ int main() {
 
   // in-place processing (react-native-audio-api hands nodes one buffer for input and output)
   gf::Engine ip(kSr);
-  ip.setEvents(ev.data(), 8, kLoop);
+  ip.setEvents(ev.data(), rows, kLoop);
   ip.play();
   ip.startCapture();
   std::vector<float> io(loopIn.begin(), loopIn.begin() + 4096);

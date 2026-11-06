@@ -52,5 +52,17 @@ export async function verifyAlignment(audio: SpikeAudio, rtlMs: number) {
  */
 export function mixTakeWithLoop(input: Float32Array, output: Float32Array, rtlFrames: number): Float32Array {
   const take = alignTake(input, rtlFrames);
-  return Float32Array.from(take, (x, i) => Math.max(-1, Math.min(1, 0.9 * x + 0.5 * output[i]!)));
+  const g = 0.7 / Math.max(1e-6, takeLevel(take).peak); // take normalised to −3 dBFS (BUILD_PLAN capture step)
+  return Float32Array.from(take, (x, i) => Math.max(-1, Math.min(1, g * x + 0.5 * output[i]!)));
+}
+
+/** Peak and clipped-sample count of a raw take: was the mic overdriven, or just loud? */
+export function takeLevel(x: Float32Array) {
+  let peak = 0, clipped = 0;
+  for (const v of x) {
+    const a = Math.abs(v);
+    if (a > peak) peak = a;
+    if (a >= 0.999) clipped++;
+  }
+  return { peak, peakDbfs: 20 * Math.log10(Math.max(peak, 1e-9)), clipped };
 }
