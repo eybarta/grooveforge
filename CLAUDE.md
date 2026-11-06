@@ -10,6 +10,7 @@ v1 ships ONE flavor: **Hip-hop**, with a **Boom Bap ⇄ Trap** switch.
 
 ## Decisions (do not relitigate without asking Eyal)
 - One **Expo** (React Native, New Architecture) codebase + Expo Router → iOS, Android and web (react-native-web).
+- **Android is deferred** (Eyal, 2026-11-06): build for iOS + web until the app works well on both, then bring up Android. Keep code cross-platform; `engine/android/` exists but is unbuilt.
 - **Shared C++ audio engine** (or Faust → C++): native via JSI, web as WASM inside an AudioWorklet. All synthesis, sampling, mixing and mastering run there, never in JS.
 - Audio I/O: **react-native-audio-api** (Web Audio-style API) — *pending the Phase 0 spike*. If the spike fails, stop and report options before switching.
 - Audio session, latency measurement, routing: a small **Expo native module** (Swift/Kotlin).
@@ -44,13 +45,13 @@ v1 ships ONE flavor: **Hip-hop**, with a **Boom Bap ⇄ Trap** switch.
 | Hit class accuracy after calibration | ≥ 0.90 |
 | Timing error after quantize | ≤ 5 ms |
 | Export loudness | target ± 0.5 LU, ≤ −1 dBTP |
-| Record → first playback, 8 bars | ≤ 2.5 s on a mid-range Android |
+| Record → first playback, 8 bars | ≤ 2.5 s on a mid-range Android (until Android returns: measure on the iPhone + web; the iPhone 16 Pro is faster, so treat its numbers as optimistic) |
 | Animations | 60 fps on a mid-range phone during playback |
 
 ## How to work
 - Work phase by phase from `docs/BUILD_PLAN.md`. Each phase ends at a **gate**: demo it, report the measured numbers, and stop for Eyal's OK.
 - Use plan mode before each phase; keep a task list.
-- Test on real devices (an iPhone and a mid-range Android) every phase — simulators lie about audio.
+- Test on real devices every phase (the iPhone now; a mid-range Android once Android returns). Simulators lie about audio.
 - Golden audio fixtures + Vitest/Jest scoring for anything in the analysis pipeline; a regression in the scores fails CI.
 - Prefer few, well-maintained dependencies. Ask before adding anything heavy.
 - Commit small, descriptive commits on the `v2` branch.

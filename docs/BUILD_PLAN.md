@@ -45,10 +45,10 @@ Record (audio-reactive orb, count-in rings, live sparks per hit) → **Forge tra
 ## Phases and gates (≈ 12 weeks, one developer; estimates, not commitments)
 ### P0 · Foundation + audio spike (weeks 1–2)
 - [ ] Branch `v2`; new Expo app (New Architecture, Expo Router, TypeScript strict); delete Grok scaffolding; keep POC audio files in `reference/` only.
-- [ ] **Audio spike on a real iPhone + Android**: react-native-audio-api — record while a loop plays, offline render to WAV, custom DSP node from C++, measured round-trip latency. Same on web with AudioWorklet + WASM.
-- [ ] C++ engine skeleton building for iOS, Android (JSI) and web (WASM); one sine voice through it on all three.
+- [ ] **Audio spike on a real iPhone (+ Android, deferred 2026-11-06)**: react-native-audio-api — record while a loop plays, offline render to WAV, custom DSP node from C++, measured round-trip latency. Same on web with AudioWorklet + WASM.
+- [ ] C++ engine skeleton building for iOS (JSI) and web (WASM); one sine voice through it on both. Android JSI build written, not built (deferred).
 - [ ] `Song` types + zustand store; golden takes (10 WAV + labelled JSON) and a scoring harness.
-- **Gate:** spike report with latency numbers per device; engine plays on all 3 platforms; CI green.
+- **Gate:** spike report with latency numbers per device; engine plays on iOS + web; CI green. (Android deferred until iOS + web are solid.)
 
 ### P1 · Studio sound (weeks 3–4)
 - [ ] Sampler (velocity layers, round-robin), kit `manifest.json`, placeholder hip-hop kit (licence-checked).
