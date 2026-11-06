@@ -52,7 +52,8 @@
           "androidForegroundService": false
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,

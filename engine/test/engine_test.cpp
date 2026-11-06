@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include <memory>
 #include <thread>
 #include <vector>
 
@@ -171,6 +172,47 @@ int main() {
     for (int b = 0; b < 4000; ++b) s.process(nullptr, l, r, 128);
     done = true;
     writer.join();
+  }
+
+  // sampler: velocity picks the layer, round-robins cycle, note pitches by playback rate, sample rate is corrected
+  {
+    constexpr int kSmp = 4800;
+    std::vector<float> soft(kSmp, 0.25f), hard(kSmp, 1.f), hard2(kSmp, 0.75f);  // constant "samples" = easy to identify
+    const float insts[] = {1, -1, 1.f, 0.f};                      // instrument 0 = sampler, centred, gain 1
+    const float zones[] = {0, 0.5f, 0, 0, 1.f, 1, 0, 1.f, 2};     // layer ≤0.5: slot 0; layer ≤1: slots 1, 2 (round-robin)
+    auto make = [&](const std::vector<float>& ev) {
+      auto s = std::make_unique<gf::Engine>(kSr);
+      assert(s->loadSample(0, soft.data(), nullptr, kSmp, kSr));
+      assert(s->loadSample(1, hard.data(), nullptr, kSmp, kSr));
+      assert(s->loadSample(2, hard2.data(), nullptr, kSmp, 24000.f));  // recorded at half the engine rate
+      assert(!s->loadSample(1, soft.data(), nullptr, kSmp, kSr));       // slots are write-once
+      s->setInstruments(insts, 1);
+      s->setZones(zones, 3);
+      s->setEvents(ev.data(), static_cast<int>(ev.size() / gf::kEventStride), kLoop);
+      s->play();
+      return s;
+    };
+    // one note per 0.5 s: velocity 0.3 (soft layer), then 1.0 twice (round-robin slot 1, then slot 2)
+    const std::vector<float> ev = {0, 0, 0.3f, 60, 0, -1, 24000, 0, 1.f, 60, 0, -1, 48000, 0, 1.f, 60, 0, -1};
+    auto s = make(ev);
+    const auto o = render(*s, 72000 + 2 * kSmp + 100);
+    assert(std::fabs(o.l[2000] - 0.25f * 0.3f) < 1e-4f);           // soft layer × velocity
+    assert(std::fabs(o.l[24000 + 2000] - 1.f) < 1e-4f);            // hard layer, round-robin 1
+    assert(std::fabs(o.l[48000 + 2000] - 0.75f) < 1e-4f);          // hard layer, round-robin 2
+    assert(o.l[24000 + kSmp + 10] == 0.f);                         // one-shot ends with the sample
+    assert(std::fabs(o.l[48000 + 2 * kSmp - 50] - 0.75f) < 1e-4f);  // the 24 kHz sample lasts twice as long at 48 kHz
+    assert(o.l[48000 + 2 * kSmp + 10] == 0.f);
+    // note 72 = one octave up = half the length
+    auto up = make({0, 0, 1.f, 72, 0, -1});
+    const auto u = render(*up, kSmp);
+    assert(std::fabs(u.l[kSmp / 2 - 10] - 1.f) < 1e-4f && u.l[kSmp / 2 + 10] == 0.f);
+    // a sampler instrument whose slot was never loaded stays silent instead of crashing
+    gf::Engine empty(kSr);
+    empty.setInstruments(insts, 1);
+    empty.setZones(zones, 3);
+    empty.setEvents(ev.data(), 3, kLoop);
+    empty.play();
+    assert(peak(render(empty, 30000).l, 0, 30000) == 0.f);
   }
 
   // reference fingerprint for the device offline-render comparison (mean |x| and peak of one dry loop, left)

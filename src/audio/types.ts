@@ -8,28 +8,47 @@ export interface AudioClock {
   readonly playing: boolean;
 }
 
-/** What the spike screen needs from each platform (spike.web.ts: Web Audio + WASM, spike.native.ts: audio-api + JSI). */
-export interface SpikeAudio {
+/** Decoded audio for the sampler (r === l for mono). */
+export interface DecodedSample {
+  l: Float32Array;
+  r: Float32Array;
+  sampleRate: number;
+}
+
+/** Instrument table + sampler zones (flat rows, see engine/include/gf/Engine.h). Swapped lock-free while playing. */
+export interface EngineProgram {
+  instruments: Float32Array;
+  zones?: Float32Array;
+}
+
+/** The C++ engine on each platform: engine.web.ts (Web Audio + WASM worklet), engine.native.ts (audio-api + JSI). */
+export interface AudioEngine {
   platform: string;
   sampleRate: number;
   clock: AudioClock;
-  /** Loads a Song into the engine (only while stopped). */
+  /** Loads a Song's notes. Safe while playing: lands at the next audio block. */
   setSong(song: Song): Promise<void>;
+  /** Instruments + zones (e.g. a kit mood). Safe while playing. */
+  setProgram(p: EngineProgram): Promise<void>;
+  /** Decodes a bundled audio asset (a `require()`d module). */
+  decode(file: number | string): Promise<DecodedSample>;
+  /** Copies a decoded sample into a write-once engine slot. */
+  loadSample(slot: number, s: DecodedSample): Promise<boolean>;
   /** Opens the mic (processing off) and starts the loop from bar 1. */
   start(): Promise<void>;
   stop(): Promise<void>;
   setDrive(amount: number): void;
   captureStart(): void;
-  /** Mic input and engine output, sample-aligned on the engine's frame clock. */
+  /** Mic input and engine output (left), sample-aligned on the engine's frame clock. */
   captureStop(): Promise<{ input: Float32Array; output: Float32Array }>;
   /** OS / browser reported latencies in seconds, for comparison with the measured round trip. */
   reportedLatency(): Record<string, number>;
   /** The ports actually in use (iOS reports the current route; web only knows the mic label). */
   route(): Promise<{ inputs: string[]; outputs: string[] }>;
-  /** Plays mono samples once through the live context (for listening back to takes). */
-  playBuffer(samples: Float32Array): void;
-  /** Renders exactly one loop of `song` offline through the same engine. */
-  renderOffline(song: Song, drive: number): Promise<Float32Array>;
+  /** Plays samples once through the live context, one array per channel (for listening back to takes). */
+  playBuffer(channels: Float32Array[]): void;
+  /** Renders `song` offline through the same engine, kit and program: one loop, or `frames` frames. [L, R]. */
+  renderOffline(song: Song, drive: number, frames?: number): Promise<Float32Array[]>;
   close(): Promise<void>;
 }
 

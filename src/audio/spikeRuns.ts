@@ -1,12 +1,12 @@
 import { loopSeconds } from "@/song/time";
 import { alignTake, estimateLags, summarize, type LatencyResult } from "./latency";
 import { clickSong } from "./spikeSongs";
-import type { SpikeAudio } from "./types";
+import type { AudioEngine } from "./types";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Plays one loop of 8 calibration clicks and returns the aligned mic + engine-output capture. */
-export async function recordClicks(audio: SpikeAudio) {
+export async function recordClicks(audio: AudioEngine) {
   const song = clickSong();
   await audio.stop();
   await audio.setSong(song);
@@ -27,7 +27,7 @@ export interface Calibration {
   reliable: boolean;
 }
 
-export async function calibrate(audio: SpikeAudio, runs = 3): Promise<Calibration> {
+export async function calibrate(audio: AudioEngine, runs = 3): Promise<Calibration> {
   const results: LatencyResult[] = [];
   for (let i = 0; i < runs; i++) {
     const { input, output } = await recordClicks(audio);
@@ -43,7 +43,7 @@ export async function calibrate(audio: SpikeAudio, runs = 3): Promise<Calibratio
 }
 
 /** Records the clicks again, shifts the take by the calibrated round trip, and measures what's left (target ≤ 1 ms). */
-export async function verifyAlignment(audio: SpikeAudio, rtlMs: number) {
+export async function verifyAlignment(audio: AudioEngine, rtlMs: number) {
   const { input, output } = await recordClicks(audio);
   const aligned = alignTake(input, (rtlMs / 1000) * audio.sampleRate);
   return summarize(estimateLags(output, aligned, audio.sampleRate, -0.01, 0.05), audio.sampleRate);

@@ -1,9 +1,11 @@
 import { emptySong } from "@/song/store";
+import { hzToMidi } from "@/song/time";
 import { PPQ, type NoteEvent, type Song } from "@/song/types";
 
+// the spike plays sine voices (defaultInstruments), so every note carries an explicit pitch
 const beats = (make: (beat: number) => Partial<NoteEvent>): NoteEvent[] =>
   Array.from({ length: 8 }, (_, b) => ({
-    id: `b${b}`, tick: b * PPQ, lane: "kick", velocity: 0.8, offsetMs: 0, source: "user", ...make(b),
+    id: `b${b}`, tick: b * PPQ, lane: "kick", velocity: 0.8, offsetMs: 0, source: "user", pitch: 33, ...make(b),
   }));
 
 const oneTrack = (notes: NoteEvent[]): Song => ({
@@ -20,7 +22,7 @@ const oneTrack = (notes: NoteEvent[]): Song => ({
 export const loopSong = (): Song =>
   oneTrack([
     ...beats(() => ({})),
-    ...beats((b) => ({ id: `h${b}`, tick: b * PPQ + PPQ / 2, lane: "hatClosed", velocity: 0.5 })),
+    ...beats((b) => ({ id: `h${b}`, tick: b * PPQ + PPQ / 2, lane: "hatClosed", velocity: 0.5, pitch: hzToMidi(2400) })),
   ]);
 
 /** Calibration: a 4 ms, ~2.6 kHz blip on every beat — short and bright enough to time precisely. */

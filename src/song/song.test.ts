@@ -50,6 +50,7 @@ describe("songToEngineEvents", () => {
     expect(p.events[1]).toBe(LANES.indexOf("bass"));
     expect(p.events[3]).toBe(69);
     expect(p.events[5]).toBe(-1); // no glide yet
+    expect(songToEngineEvents(song({ tracks: [{ ...s.tracks[0]!, notes: [note(0)] }] }), 48000).events[3]).toBe(60); // drums: original pitch
   });
 
   it("gives every lane an instrument, with closed and open hat sharing a choke group", () => {

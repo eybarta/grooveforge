@@ -3,10 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { alignTake } from "@/audio/latency";
 import { saveWav } from "@/audio/saveWav";
-import { createSpikeAudio } from "@/audio/spike";
+import { createAudioEngine } from "@/audio/engine";
 import { calibrate, mixTakeWithLoop, takeLevel, verifyAlignment } from "@/audio/spikeRuns";
 import { HOST_REFERENCE, loopSong } from "@/audio/spikeSongs";
-import type { SpikeAudio } from "@/audio/types";
+import type { AudioEngine } from "@/audio/types";
 import { encodeWav, fingerprint } from "@/audio/wav";
 import { LoopBeam } from "@/components/LoopBeam";
 
@@ -16,7 +16,7 @@ const SOAK_CAPTURE_SEC = 25;
 
 /** Phase 0 audio spike: every result is shown here and logged as JSON ("[spike]") for Metro / the console. */
 export default function Spike() {
-  const [audio, setAudio] = useState<SpikeAudio | null>(null);
+  const [audio, setAudio] = useState<AudioEngine | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [route, setRoute] = useState<Route>("wired");
   const [drive, setDrive] = useState(0);
@@ -41,14 +41,14 @@ export default function Spike() {
   };
 
   useEffect(() => {
-    let created: SpikeAudio | null = null;
-    createSpikeAudio()
+    let created: AudioEngine | null = null;
+    createAudioEngine()
       .then((a) => { created = a; setAudio(a); })
       .catch((e) => setLog([`init failed: ${e}`]));
     return () => void created?.close();
   }, []);
 
-  const run = async (label: string, f: (a: SpikeAudio) => Promise<void>) => {
+  const run = async (label: string, f: (a: AudioEngine) => Promise<void>) => {
     if (!audio || busy) return;
     stopRequested.current = false;
     setBusy(label);
@@ -89,7 +89,7 @@ export default function Spike() {
 
   const render = (save = true) => run("Render WAV", async (a) => {
     const t0 = Date.now();
-    const x = await a.renderOffline(loopSong(), drive);
+    const [x] = await a.renderOffline(loopSong(), drive);
     const f = fingerprint(x);
     const matchesHost = drive === 0
       && f.frames === HOST_REFERENCE.frames
@@ -115,11 +115,11 @@ export default function Spike() {
     if (!take) throw new Error("record a loop first");
     await a.stop();
     const mix = mixTakeWithLoop(take.input, take.output, rtlFrames(a));
-    a.playBuffer(mix);
+    a.playBuffer([mix]);
     report("playing take + loop", { seconds: mix.length / a.sampleRate, shiftedMs: rtlMs ?? 0 });
   });
 
-  const rtlFrames = (a: SpikeAudio) => ((rtlMs ?? 0) / 1000) * a.sampleRate;
+  const rtlFrames = (a: AudioEngine) => ((rtlMs ?? 0) / 1000) * a.sampleRate;
 
   // bypasses run()'s busy guard on purpose: Stop has to work while a step is running
   const stop = () => {
@@ -173,7 +173,7 @@ export default function Spike() {
 }
 
 /** What the listener hears lags the engine by the output latency: measured (RTL − reported input) once calibrated. */
-function outputLatencyFrames(a: SpikeAudio, rtlMs: number | null) {
+function outputLatencyFrames(a: AudioEngine, rtlMs: number | null) {
   const r = a.reportedLatency();
   const sec = rtlMs !== null ? rtlMs / 1000 - (r.inputLatency || 0) : (r.outputLatency || 0) + (r.baseLatency || 0);
   return sec * a.sampleRate;

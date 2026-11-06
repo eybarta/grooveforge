@@ -13,10 +13,7 @@ export function noteTimeSec(note: NoteEvent, song: Song): number {
   return (note.tick + swingTicks) * secPerTick(song.bpm) + (note.offsetMs / 1000) * (1 - song.quantize);
 }
 
-// shortcut: until the sampler/808 land (P1 steps 3-5) every lane is a sine voice at a fixed pitch.
-const LANE_HZ: Record<Lane, number> = {
-  kick: 55, snare: 185, hatClosed: 2400, hatOpen: 2000, perc: 880, bass: 55, melody: 440,
-};
+/** Note length when a NoteEvent has none (one-shot samples ignore it; sine and 808 voices use it). */
 const DEFAULT_DUR_SEC: Record<Lane, number> = {
   kick: 0.25, snare: 0.12, hatClosed: 0.04, hatOpen: 0.2, perc: 0.06, bass: 0.4, melody: 0.3,
 };
@@ -51,7 +48,7 @@ export function songToEngineEvents(song: Song, sampleRate: number): { events: Fl
     const gain = 10 ** (track.gainDb / 20);
     for (const n of track.notes) {
       const frame = Math.round(noteTimeSec(n, song) * sampleRate);
-      const note = n.pitch ?? hzToMidi(LANE_HZ[n.lane]);
+      const note = n.pitch ?? 60; // sampler: 60 = the sample's original pitch
       const dur = n.durationTicks === undefined
         ? DEFAULT_DUR_SEC[n.lane] * sampleRate
         : n.durationTicks * secPerTick(song.bpm) * sampleRate;

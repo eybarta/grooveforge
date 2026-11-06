@@ -23,6 +23,7 @@ Engine::~Engine() {
   delete pending_.exchange(nullptr);
   delete retired_.exchange(nullptr);
   delete active_;
+  for (auto& s : samples_) delete s.load();
 }
 
 // ---------------------------------------------------------------- control thread
@@ -53,6 +54,29 @@ void Engine::setInstruments(const float* flat, int count) {
     staged_.instruments[i] = {static_cast<VoiceKind>(static_cast<int>(r[0])), static_cast<int>(r[1]), r[2], r[3]};
   }
   publish();
+}
+
+void Engine::setZones(const float* flat, int rows) {
+  staged_.zones.assign(static_cast<size_t>(kMaxInstruments), {});
+  for (int i = 0; i < rows; ++i) {
+    const float* r = flat + i * kZoneStride;
+    const int inst = static_cast<int>(r[0]), slot = static_cast<int>(r[2]);
+    if (inst < 0 || inst >= kMaxInstruments || slot < 0 || slot >= kMaxSamples) continue;
+    auto& layers = staged_.zones[inst];
+    if (layers.empty() || layers.back().maxVelocity != r[1]) layers.push_back({r[1], {}});
+    layers.back().slots.push_back(slot);
+  }
+  for (auto& layers : staged_.zones)
+    std::sort(layers.begin(), layers.end(), [](const Layer& a, const Layer& b) { return a.maxVelocity < b.maxVelocity; });
+  publish();
+}
+
+bool Engine::loadSample(int slot, const float* l, const float* r, int frames, float sampleRate) {
+  if (slot < 0 || slot >= kMaxSamples || frames <= 0 || samples_[slot].load() != nullptr) return false;
+  auto* s = new SampleData{std::vector<float>(l, l + frames), std::vector<float>(r ? r : l, (r ? r : l) + frames),
+                           sampleRate};
+  samples_[slot].store(s, std::memory_order_release);
+  return true;
 }
 
 void Engine::play() {
@@ -92,6 +116,21 @@ void Engine::trigger(const Event& e) {
   const auto& insts = active_->instruments;
   const Instrument inst = (e.instrument >= 0 && static_cast<size_t>(e.instrument) < insts.size()) ? insts[e.instrument]
                                                                                                   : Instrument{};
+  // a sampler note needs a loaded sample before it may steal a voice or choke anything
+  const SampleData* sample = nullptr;
+  if (inst.kind == VoiceKind::Sampler) {
+    if (e.instrument < 0 || static_cast<size_t>(e.instrument) >= active_->zones.size()) return;
+    const auto& layers = active_->zones[e.instrument];
+    if (layers.empty()) return;
+    size_t li = layers.size() - 1;
+    for (size_t i = 0; i < layers.size(); ++i)
+      if (e.velocity <= layers[i].maxVelocity) { li = i; break; }
+    const Layer& layer = layers[li];
+    if (layer.slots.empty()) return;
+    const int slot = layer.slots[roundRobin_[e.instrument][li % kMaxLayers]++ % layer.slots.size()];
+    sample = samples_[slot].load(std::memory_order_acquire);
+    if (!sample) return;
+  }
   if (inst.chokeGroup >= 0) {
     for (auto& v : voices_)
       if (v.active && v.chokeGroup == inst.chokeGroup && v.fadeStep == 0) v.fadeStep = 1.f / (kChokeFadeSec * sr_);
@@ -105,30 +144,69 @@ void Engine::trigger(const Event& e) {
   const float g = e.velocity * inst.gain;
   *v = Voice{};
   v->active = true;
+  v->kind = inst.kind;
   v->instrument = e.instrument;
   v->chokeGroup = inst.chokeGroup;
   v->gainL = g * std::min(1.f, 1.f - inst.pan);  // balance law: centre = unity on both sides
   v->gainR = g * std::min(1.f, 1.f + inst.pan);
+  if (inst.kind == VoiceKind::Sampler) {
+    v->sample = sample;
+    // note 60 = original pitch; also corrects for a sample recorded at another rate than the engine runs at
+    v->rate = std::pow(2.0, (e.note - 60.0) / 12.0) * sample->sampleRate / sr_;
+    v->left = static_cast<int64_t>(static_cast<double>(sample->l.size()) / v->rate);  // for voice stealing
+    return;
+  }
   v->phaseInc = 2 * std::numbers::pi * noteToHz(e.note) / sr_;
   v->amp = 1.f;
   v->left = e.durationFrames;
   v->decay = std::exp(-5.f / static_cast<float>(std::max<int64_t>(1, e.durationFrames)));  // −43 dB at the end
 }
 
-float Engine::renderVoice(Voice& v) {
-  if (v.left <= 0 || v.fade <= 0) {
+namespace {
+/** 4-point cubic Hermite interpolation at fractional position t ∈ [0,1) between y1 and y2. */
+inline float hermite(float y0, float y1, float y2, float y3, float t) {
+  const float c1 = 0.5f * (y2 - y0), c2 = y0 - 2.5f * y1 + 2.f * y2 - 0.5f * y3, c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
+  return ((c3 * t + c2) * t + c1) * t + y1;
+}
+inline float tap(const std::vector<float>& x, int64_t i) {
+  return i >= 0 && i < static_cast<int64_t>(x.size()) ? x[i] : 0.f;
+}
+}  // namespace
+
+void Engine::renderVoice(Voice& v, float& l, float& r) {
+  if (v.fade <= 0) {
     v.active = false;
-    return 0.f;
+    return;
+  }
+  const float fade = v.fade;
+  v.fade -= v.fadeStep;
+  if (v.kind == VoiceKind::Sampler) {
+    const auto& s = *v.sample;
+    const int64_t i = static_cast<int64_t>(v.pos);
+    if (i >= static_cast<int64_t>(s.l.size())) {
+      v.active = false;
+      return;
+    }
+    const float t = static_cast<float>(v.pos - static_cast<double>(i));
+    l += fade * v.gainL * hermite(tap(s.l, i - 1), tap(s.l, i), tap(s.l, i + 1), tap(s.l, i + 2), t);
+    r += fade * v.gainR * hermite(tap(s.r, i - 1), tap(s.r, i), tap(s.r, i + 1), tap(s.r, i + 2), t);
+    v.pos += v.rate;
+    --v.left;
+    return;
+  }
+  if (v.left <= 0) {
+    v.active = false;
+    return;
   }
   --v.left;
-  const float env = v.amp * std::min(1.f, v.attack) * v.fade;
+  const float env = v.amp * std::min(1.f, v.attack) * fade;
   v.attack += 1.f / (0.002f * sr_);  // 2 ms attack avoids a click
   v.amp *= v.decay;
-  v.fade -= v.fadeStep;
   const float s = env * static_cast<float>(std::sin(v.phase));
   v.phase += v.phaseInc;
   if (v.phase > 2 * std::numbers::pi) v.phase -= 2 * std::numbers::pi;
-  return s;
+  l += s * v.gainL;
+  r += s * v.gainR;
 }
 
 void Engine::process(const float* in, float* outL, float* outR, int frames) {
@@ -165,12 +243,8 @@ void Engine::process(const float* in, float* outL, float* outR, int frames) {
       ++frame_;
     }
     float l = 0.f, r = 0.f;
-    for (auto& v : voices_) {
-      if (!v.active) continue;
-      const float s = renderVoice(v);
-      l += s * v.gainL;
-      r += s * v.gainR;
-    }
+    for (auto& v : voices_)
+      if (v.active) renderVoice(v, l, r);
     if (drive > 0.f) {  // the custom effect: Drive
       l = std::tanh(k * l) * norm;
       r = std::tanh(k * r) * norm;

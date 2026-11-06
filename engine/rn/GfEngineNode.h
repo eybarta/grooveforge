@@ -84,6 +84,24 @@ class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
     engine_->setInstruments(reinterpret_cast<const float *>(buffer.data(runtime)), instruments);
     return jsi::Value::undefined();
   }
+  JSI_HOST_FUNCTION_DECL(setZones) {
+    auto buffer = args[0].asObject(runtime).getArrayBuffer(runtime);
+    const int rows = static_cast<int>(buffer.size(runtime) / (kZoneStride * sizeof(float)));
+    engine_->setZones(reinterpret_cast<const float *>(buffer.data(runtime)), rows);
+    return jsi::Value::undefined();
+  }
+  // loadSample(slot, left: ArrayBuffer, right: ArrayBuffer | null, sampleRate) → boolean
+  JSI_HOST_FUNCTION_DECL(loadSample) {
+    auto left = args[1].asObject(runtime).getArrayBuffer(runtime);
+    const int frames = static_cast<int>(left.size(runtime) / sizeof(float));
+    const float *r = nullptr;
+    if (args[2].isObject()) {
+      auto right = args[2].asObject(runtime).getArrayBuffer(runtime);
+      if (static_cast<int>(right.size(runtime) / sizeof(float)) == frames) r = reinterpret_cast<const float *>(right.data(runtime));
+    }
+    return jsi::Value(engine_->loadSample(static_cast<int>(args[0].asNumber()), reinterpret_cast<const float *>(left.data(runtime)),
+                                          r, frames, static_cast<float>(args[3].asNumber())));
+  }
   JSI_HOST_FUNCTION_DECL(play) { engine_->play(); return jsi::Value::undefined(); }
   JSI_HOST_FUNCTION_DECL(stop) { engine_->stop(); return jsi::Value::undefined(); }
   JSI_HOST_FUNCTION_DECL(setDrive) {
@@ -110,6 +128,8 @@ class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
         engine_(&node->engine()) {
     addFunctions(JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, setEvents),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, setInstruments),
+                 JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, setZones),
+                 JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, loadSample),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, play),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, stop),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, setDrive),

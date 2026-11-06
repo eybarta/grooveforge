@@ -12,9 +12,26 @@ namespace gf {
 constexpr int kEventStride = 6;
 /** Flat instrument row: [kind, chokeGroup, gain, pan]. */
 constexpr int kInstrumentStride = 4;
+/** Flat zone row: [instrument, maxVelocity, sampleSlot]. Rows of one instrument and maxVelocity form a layer. */
+constexpr int kZoneStride = 3;
 constexpr int kMaxVoices = 32;
+constexpr int kMaxSamples = 256;
+constexpr int kMaxInstruments = 64;
+constexpr int kMaxLayers = 8;  // round-robin counters per instrument
 
-enum class VoiceKind : uint8_t { Sine = 0 };
+enum class VoiceKind : uint8_t { Sine = 0, Sampler = 1 };
+
+/** Decoded audio for the sampler. Immutable once loaded. */
+struct SampleData {
+  std::vector<float> l, r;
+  float sampleRate = 48000.f;
+};
+
+/** One velocity layer of a sampled instrument: velocities up to maxVelocity pick from these round-robin slots. */
+struct Layer {
+  float maxVelocity = 1.f;
+  std::vector<int> slots;
+};
 
 struct Instrument {
   VoiceKind kind = VoiceKind::Sine;
@@ -36,6 +53,7 @@ struct Event {
 struct Program {
   std::vector<Event> events;  // sorted by frame
   std::vector<Instrument> instruments;
+  std::vector<std::vector<Layer>> zones;  // per instrument, ascending maxVelocity (sampler instruments only)
   int64_t loopFrames = 0;
 };
 
@@ -59,6 +77,9 @@ class Engine {
   // ---- control thread (JS / main). Safe while playing: changes land at the next audio block.
   void setEvents(const float* flat, int rows, int64_t loopFrames);
   void setInstruments(const float* flat, int count);
+  void setZones(const float* flat, int rows);
+  /** Loads decoded audio into a slot (r may be null for mono). A slot can be filled once; refills are ignored. */
+  bool loadSample(int slot, const float* l, const float* r, int frames, float sampleRate);
   void play();  // from loop start
   void stop();
   /** Drive effect amount, 0 = bypass … 1 = heavy tanh saturation. */
@@ -77,18 +98,24 @@ class Engine {
  private:
   struct Voice {
     bool active = false;
+    VoiceKind kind = VoiceKind::Sine;
     int instrument = 0;
     int chokeGroup = -1;
     float gainL = 0, gainR = 0;
+    float fade = 1, fadeStep = 0;
+    // sine
     double phase = 0, phaseInc = 0;
-    float amp = 0, decay = 0, attack = 0, fade = 1, fadeStep = 0;
+    float amp = 0, decay = 0, attack = 0;
     int64_t left = 0;
+    // sampler
+    const SampleData* sample = nullptr;
+    double pos = 0, rate = 1;
   };
 
   void publish();                // control thread: copy staged_ and hand it to the audio thread
   void adoptPending();           // audio thread
   void trigger(const Event& e);  // audio thread
-  float renderVoice(Voice& v);   // audio thread
+  void renderVoice(Voice& v, float& l, float& r);  // audio thread: adds the voice's next frame
 
   float sr_;
 
@@ -105,6 +132,9 @@ class Engine {
   std::atomic<float> drive_{0.f};
 
   Voice voices_[kMaxVoices];
+  uint32_t roundRobin_[kMaxInstruments][kMaxLayers] = {};  // per velocity layer; audio thread only
+
+  std::atomic<const SampleData*> samples_[kMaxSamples] = {};  // write-once slots, owned (freed) by ~Engine
 
   std::vector<float> capIn_, capOut_;
   std::atomic<bool> capturing_{false};

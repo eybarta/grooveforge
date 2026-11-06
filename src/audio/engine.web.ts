@@ -1,6 +1,7 @@
+import { Asset } from "expo-asset";
 import { defaultInstruments, songToEngineEvents } from "@/song/time";
 import type { Song } from "@/song/types";
-import { CAPTURE_SECONDS, SAMPLE_RATE, type AudioClock, type SpikeAudio } from "./types";
+import { CAPTURE_SECONDS, SAMPLE_RATE, type AudioClock, type AudioEngine, type DecodedSample, type EngineProgram } from "./types";
 
 type Msg = { type: string; [k: string]: unknown };
 
@@ -26,13 +27,18 @@ async function engineNode(ctx: BaseAudioContext, wasmBytes: ArrayBuffer, onStart
       pending.set(id, resolve);
       node.port.postMessage({ ...msg, id });
     });
-  const load = async (song: Song) => {
+  const setProgram = async (p: EngineProgram) => {
+    await call({ type: "instruments", instruments: p.instruments });
+    if (p.zones) await call({ type: "zones", zones: p.zones });
+  };
+  const loadSample = async (slot: number, s: DecodedSample) =>
+    (await call({ type: "sample", slot, l: s.l, r: s.r, sampleRate: s.sampleRate })).ok as boolean;
+  const setSong = async (song: Song) => {
     const { events, loopFrames } = songToEngineEvents(song, ctx.sampleRate);
-    await call({ type: "instruments", instruments: defaultInstruments() });
     await call({ type: "events", events, loopFrames });
     return loopFrames;
   };
-  return { node, call, load };
+  return { node, call, setProgram, loadSample, setSong };
 }
 
 /**
@@ -55,15 +61,19 @@ function webClock(ctx: AudioContext) {
   return { clock, state };
 }
 
-export async function createSpikeAudio(): Promise<SpikeAudio> {
+export async function createAudioEngine(): Promise<AudioEngine> {
   const wasmBytes = await (await fetch("/gf-engine.wasm")).arrayBuffer();
   const ctx = new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: "interactive" });
   const { clock, state: clockState } = webClock(ctx);
-  const engine = await engineNode(ctx, wasmBytes.slice(0), (startFrame) => {
+  const live = await engineNode(ctx, wasmBytes.slice(0), (startFrame) => {
     clockState.startFrame = startFrame;
     clockState.playing = true;
   });
-  engine.node.connect(ctx.destination);
+  live.node.connect(ctx.destination);
+  // remembered so offline renders get exactly the same kit and program
+  let program: EngineProgram = { instruments: defaultInstruments() };
+  const samples = new Map<number, DecodedSample>();
+  await live.setProgram(program);
   let mic: MediaStream | null = null;
   let playback: ReturnType<typeof ctx.createBufferSource> | null = null; // Stop also cuts take playback
 
@@ -71,28 +81,42 @@ export async function createSpikeAudio(): Promise<SpikeAudio> {
     platform: `web (${navigator.userAgent.match(/(Chrome|Firefox|Safari)\/[\d.]+/)?.[0] ?? "browser"})`,
     sampleRate: ctx.sampleRate,
     clock,
-    setSong: async (song) => void (clockState.loopFrames = await engine.load(song)),
+    setSong: async (song) => void (clockState.loopFrames = await live.setSong(song)),
+    async setProgram(p) {
+      program = p;
+      await live.setProgram(p);
+    },
+    async decode(file) {
+      const asset = Asset.fromModule(file);
+      const buffer = await ctx.decodeAudioData(await (await fetch(asset.uri)).arrayBuffer());
+      const l = buffer.getChannelData(0);
+      return { l, r: buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : l, sampleRate: buffer.sampleRate };
+    },
+    async loadSample(slot, s) {
+      samples.set(slot, s);
+      return live.loadSample(slot, s);
+    },
     async start() {
       if (!mic) {
         // CLAUDE.md: mic capture with echo cancellation, noise suppression and auto gain OFF
         mic = await navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 },
         });
-        ctx.createMediaStreamSource(mic).connect(engine.node);
+        ctx.createMediaStreamSource(mic).connect(live.node);
       }
       await ctx.resume();
-      await engine.call({ type: "play" });
+      await live.call({ type: "play" });
     },
     async stop() {
       playback?.stop();
       playback = null;
       clockState.playing = false;
-      await engine.call({ type: "stop" });
+      await live.call({ type: "stop" });
     },
-    setDrive: (amount) => void engine.call({ type: "drive", amount }),
-    captureStart: () => void engine.call({ type: "captureStart" }),
+    setDrive: (amount) => void live.call({ type: "drive", amount }),
+    captureStart: () => void live.call({ type: "captureStart" }),
     captureStop: async () => {
-      const r = await engine.call({ type: "captureStop" });
+      const r = await live.call({ type: "captureStop" });
       return { input: r.input as Float32Array, output: r.output as Float32Array };
     },
     reportedLatency() {
@@ -105,24 +129,27 @@ export async function createSpikeAudio(): Promise<SpikeAudio> {
       };
     },
     route: async () => ({ inputs: mic ? mic.getAudioTracks().map((t) => t.label) : [], outputs: [] }),
-    playBuffer(samples) {
-      const b = ctx.createBuffer(1, samples.length, ctx.sampleRate);
-      b.getChannelData(0).set(samples);
+    playBuffer(channels) {
+      const b = ctx.createBuffer(channels.length, channels[0]!.length, ctx.sampleRate);
+      channels.forEach((c, i) => b.getChannelData(i).set(c));
       const src = ctx.createBufferSource();
       src.buffer = b;
       src.connect(ctx.destination);
       src.start();
       playback = src;
     },
-    async renderOffline(song, drive) {
-      const probe = songToEngineEvents(song, SAMPLE_RATE);
-      const off = new OfflineAudioContext(2, probe.loopFrames, SAMPLE_RATE);
+    async renderOffline(song, drive, frames) {
+      const length = frames ?? songToEngineEvents(song, SAMPLE_RATE).loopFrames;
+      const off = new OfflineAudioContext(2, length, SAMPLE_RATE);
       const e = await engineNode(off, wasmBytes.slice(0));
       e.node.connect(off.destination);
-      await e.load(song);
+      for (const [slot, s] of samples) await e.loadSample(slot, s);
+      await e.setProgram(program);
+      await e.setSong(song);
       await e.call({ type: "drive", amount: drive });
       await e.call({ type: "play" }); // replies arrive in order, so the engine is ready before rendering starts
-      return (await off.startRendering()).getChannelData(0);
+      const out = await off.startRendering();
+      return [out.getChannelData(0), out.getChannelData(1)];
     },
     async close() {
       mic?.getTracks().forEach((t) => t.stop());

@@ -9,6 +9,9 @@ export default function Index() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>GrooveForge 2.0</Text>
+      <Link href="/studio" style={styles.link} accessibilityRole="button">
+        Studio sound →
+      </Link>
       <Link href="/spike" style={styles.link} accessibilityRole="button">
         Audio spike →
       </Link>

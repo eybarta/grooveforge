@@ -42,6 +42,25 @@ class GfEngineProcessor extends AudioWorkletProcessor {
         ex.gf_free(p);
         break;
       }
+      case "zones": {
+        const n = msg.zones.length;
+        const p = ex.gf_alloc(Math.max(1, n));
+        this.heap(p, n).set(msg.zones);
+        ex.gf_set_zones(e, p, n / 3); // rows of 3 (kZoneStride)
+        ex.gf_free(p);
+        break;
+      }
+      case "sample": {
+        // copied into the engine's own storage; the temp buffers are freed right away
+        const n = msg.l.length;
+        const pl = ex.gf_alloc(n), pr = ex.gf_alloc(n);
+        this.heap(pl, n).set(msg.l);
+        this.heap(pr, n).set(msg.r);
+        reply.ok = ex.gf_load_sample(e, msg.slot, pl, pr, n, msg.sampleRate) === 1;
+        ex.gf_free(pl);
+        ex.gf_free(pr);
+        break;
+      }
       case "play": ex.gf_play(e); this.announceStart = true; break;
       case "stop": ex.gf_stop(e); break;
       case "drive": ex.gf_set_drive(e, msg.amount); break;
