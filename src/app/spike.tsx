@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { alignTake } from "@/audio/latency";
 import { saveWav } from "@/audio/saveWav";
@@ -24,6 +24,14 @@ export default function Spike() {
   const [log, setLog] = useState<string[]>([]);
   // dev hook: grooveforge://spike?auto=render runs the offline render on launch (no share sheet), for headless checks
   const { auto } = useLocalSearchParams<{ auto?: string }>();
+  const stopRequested = useRef(false);
+  // waits up to `ms`, but returns as soon as Stop is tapped
+  const wait = (ms: number) =>
+    new Promise<void>((resolve) => {
+      const end = Date.now() + ms;
+      const tick = () => (stopRequested.current || Date.now() >= end ? resolve() : setTimeout(tick, 100));
+      tick();
+    });
 
   const report = (step: string, data: object) => {
     const line = { step, route, platform: audio?.platform, ...data };
@@ -41,6 +49,7 @@ export default function Spike() {
 
   const run = async (label: string, f: (a: SpikeAudio) => Promise<void>) => {
     if (!audio || busy) return;
+    stopRequested.current = false;
     setBusy(label);
     try { await f(audio); } catch (e) { report(`${label} FAILED`, { error: String(e) }); } finally { setBusy(null); }
   };
@@ -51,15 +60,15 @@ export default function Spike() {
     await a.start();
     a.captureStart(); // capture + wall clock both start once audio flows (start() includes mic/session startup)
     const t0 = Date.now();
-    await new Promise((r) => setTimeout(r, SOAK_CAPTURE_SEC * 1000));
+    await wait(SOAK_CAPTURE_SEC * 1000);
     const { input, output } = await a.captureStop();
     const elapsed = (Date.now() - t0) / 1000;
     // the audio callback should process frames at the sample rate; a stalled callback shows up as a ratio < 1
     report("soak capture", { capturedSec: input.length / a.sampleRate, wallSec: elapsed, ratio: input.length / a.sampleRate / elapsed, take: takeLevel(input) });
     setTake({ input, output });
-    await new Promise((r) => setTimeout(r, (SOAK_SEC - SOAK_CAPTURE_SEC) * 1000));
+    await wait((SOAK_SEC - SOAK_CAPTURE_SEC) * 1000);
     await a.stop();
-    report("soak done", { seconds: SOAK_SEC, listenFor: "clicks/dropouts in the loop", reported: a.reportedLatency() });
+    report("soak done", { seconds: Math.round((Date.now() - t0) / 1000), listenFor: "clicks/dropouts in the loop", reported: a.reportedLatency() });
   });
 
   const cal = () => run("Calibrate", async (a) => {
@@ -112,7 +121,10 @@ export default function Spike() {
   const rtlFrames = (a: SpikeAudio) => ((rtlMs ?? 0) / 1000) * a.sampleRate;
 
   // bypasses run()'s busy guard on purpose: Stop has to work while a step is running
-  const stop = () => void audio?.stop().then(() => report("stopped", {}));
+  const stop = () => {
+    stopRequested.current = true; // ends a running step's wait (Loop + record) so the other buttons come back
+    void audio?.stop().then(() => report("stopped", {}));
+  };
 
   return (
     <ScrollView contentContainerStyle={s.page}>
