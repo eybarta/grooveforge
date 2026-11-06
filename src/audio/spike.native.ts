@@ -50,6 +50,11 @@ export async function createSpikeAudio(): Promise<SpikeAudio> {
       baseLatency: ctx.baseLatency,
       inputLatency: recorder.inputLatency,
     }),
+    async route() {
+      const d = await AudioManager.getDevicesInfo();
+      const names = (list: { name: string; category: string }[]) => list.map((x) => `${x.name} (${x.category})`);
+      return { inputs: names(d.currentInputs), outputs: names(d.currentOutputs) };
+    },
     playBuffer(samples) {
       const b = ctx.createBuffer(1, samples.length, ctx.sampleRate);
       b.getChannelData(0).set(samples);

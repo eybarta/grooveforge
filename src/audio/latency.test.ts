@@ -51,6 +51,12 @@ describe("latency estimation", () => {
     expect(summarize(estimateLags(out, loopback(out, lag, 0.3, 0.005), SR), SR).rtlMs).toBeCloseTo(210, 1);
   });
 
+  it("drops clicks the mic didn't clearly hear instead of letting them skew the result", () => {
+    const r = summarize({ lags: [1000, 1001, 5000, 1000], scores: [0.9, 0.95, 0.1, 0.92] }, SR);
+    expect(r).toMatchObject({ clicks: 3, rejected: 1, rtlMs: (1000 / SR) * 1000 });
+    expect(r.spreadMs).toBeCloseTo((1 / SR) * 1000, 9);
+  });
+
   it("aligning the take by the measured round trip leaves no residual", () => {
     const lag = 1500;
     const aligned = alignTake(loopback(out, lag, 0.2, 0.005), lag);

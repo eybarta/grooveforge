@@ -65,7 +65,10 @@ export default function Spike() {
   const cal = () => run("Calibrate", async (a) => {
     const c = await calibrate(a);
     setRtlMs(c.rtlMs);
-    report("latency", { rtlMs: c.rtlMs, repeatabilityMs: c.repeatabilityMs, runs: c.runs, reportedSec: a.reportedLatency() });
+    report("latency", {
+      rtlMs: c.rtlMs, repeatabilityMs: c.repeatabilityMs, reliable: c.reliable, runs: c.runs,
+      ioRoute: await a.route(), reportedSec: a.reportedLatency(),
+    });
   });
 
   const verify = () => run("Verify shift", async (a) => {

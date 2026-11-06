@@ -67,17 +67,26 @@ export interface LatencyResult {
   rtlMs: number;
   /** max − min of the per-click lags. */
   spreadMs: number;
+  /** Clicks heard clearly enough to use (score ≥ minScore). */
   clicks: number;
+  /** Clicks dropped because the mic didn't clearly hear them. */
+  rejected: number;
   minScore: number;
 }
 
-export function summarize(est: LagEstimate, sampleRate: number): LatencyResult {
+/** Below this normalised correlation the "click" found is more likely noise or a muffled path than the click. */
+export const MIN_CLICK_SCORE = 0.5;
+
+export function summarize(est: LagEstimate, sampleRate: number, minScore = MIN_CLICK_SCORE): LatencyResult {
   const ms = (f: number) => (f / sampleRate) * 1000;
+  const lags = est.lags.filter((_, i) => est.scores[i]! >= minScore);
+  const scores = est.scores.filter((s) => s >= minScore);
   return {
-    rtlMs: est.lags.length ? ms(median(est.lags)) : NaN,
-    spreadMs: est.lags.length ? ms(Math.max(...est.lags) - Math.min(...est.lags)) : NaN,
-    clicks: est.lags.length,
-    minScore: est.scores.length ? Math.min(...est.scores) : 0,
+    rtlMs: lags.length ? ms(median(lags)) : NaN,
+    spreadMs: lags.length ? ms(Math.max(...lags) - Math.min(...lags)) : NaN,
+    clicks: lags.length,
+    rejected: est.lags.length - lags.length,
+    minScore: scores.length ? Math.min(...scores) : 0,
   };
 }
 

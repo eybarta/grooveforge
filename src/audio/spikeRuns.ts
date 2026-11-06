@@ -23,6 +23,8 @@ export interface Calibration {
   rtlMs: number;
   /** max − min of the per-run round trips: the ±1 ms repeatability criterion. */
   repeatabilityMs: number;
+  /** Every run heard ≥ 6 of its clicks clearly; otherwise re-run (mic covered? too quiet?). */
+  reliable: boolean;
 }
 
 export async function calibrate(audio: SpikeAudio, runs = 3): Promise<Calibration> {
@@ -36,6 +38,7 @@ export async function calibrate(audio: SpikeAudio, runs = 3): Promise<Calibratio
     runs: results,
     rtlMs: rtls.length ? rtls[rtls.length >> 1]! : NaN,
     repeatabilityMs: rtls.length ? rtls[rtls.length - 1]! - rtls[0]! : NaN,
+    reliable: results.every((r) => r.clicks >= 6),
   };
 }
 
