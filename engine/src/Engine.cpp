@@ -84,7 +84,7 @@ void Engine::setMix(const float* flat, int length) {
   if (length >= kBusParams) {
     // Buses is kBusParams floats in layout order
     static_assert(std::is_trivially_copyable_v<Buses> && sizeof(Buses) == kBusParams * sizeof(float));
-    std::memcpy(&staged_.mix.buses, flat, sizeof(Buses));
+    std::memcpy(static_cast<void*>(&staged_.mix.buses), flat, sizeof(Buses));  // void*: GCC -Wclass-memaccess
     const int rows = std::min((length - kBusParams) / kStripStride, kMaxInstruments);
     staged_.mix.strips.resize(static_cast<size_t>(rows));
     for (int i = 0; i < rows; ++i) {
