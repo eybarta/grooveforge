@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { decodeWav } from "@/audio/wav";

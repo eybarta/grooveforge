@@ -1,3 +1,4 @@
+/// <reference types="node" />
 // Generates the 2 synthetic golden takes (WAV + labels) so the harness runs before real takes exist.
 // Deterministic (seeded), so re-running produces identical files. Run: npm run golden:make
 import { writeFileSync } from "node:fs";
