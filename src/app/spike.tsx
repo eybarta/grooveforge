@@ -48,9 +48,9 @@ export default function Spike() {
   const soak = () => run("Loop + record", async (a) => {
     await a.stop();
     await a.setSong(loopSong());
-    a.captureStart();
-    const t0 = Date.now();
     await a.start();
+    a.captureStart(); // capture + wall clock both start once audio flows (start() includes mic/session startup)
+    const t0 = Date.now();
     await new Promise((r) => setTimeout(r, SOAK_CAPTURE_SEC * 1000));
     const { input } = await a.captureStop();
     const elapsed = (Date.now() - t0) / 1000;
@@ -98,7 +98,8 @@ export default function Spike() {
     await saveWav(encodeWav(take, a.sampleRate), `gf-take-${route}${rtlMs === null ? "-unaligned" : ""}.wav`);
   });
 
-  const stop = () => run("Stop", async (a) => a.stop());
+  // bypasses run()'s busy guard on purpose: Stop has to work while a step is running
+  const stop = () => void audio?.stop().then(() => report("stopped", {}));
 
   return (
     <ScrollView contentContainerStyle={s.page}>
