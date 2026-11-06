@@ -10,7 +10,11 @@
     "backgroundColor": "#07060B",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.eyalbarta.grooveforge"
+      "bundleIdentifier": "com.eyalbarta.grooveforge",
+      "appleTeamId": "8Q455XY9X4",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "GrooveForge connects to the development server on your computer."
+      }
     },
     "android": {
       "package": "com.eyalbarta.grooveforge",
