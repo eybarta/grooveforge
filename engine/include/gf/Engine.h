@@ -172,6 +172,7 @@ class Engine {
   std::atomic<bool> startRequested_{false}, stopRequested_{false};
   bool playing_ = false;  // audio thread only
   int64_t frame_ = 0;     // frames since play (audio thread only)
+  int quietFrames_ = 0;   // how long the master output has been below one 24-bit LSB (audio thread only)
   size_t next_ = 0;       // next event in active_ for the current loop pass
   std::atomic<float> drive_{0.f};
 

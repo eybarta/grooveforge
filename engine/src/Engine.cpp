@@ -13,6 +13,7 @@ namespace gf {
 namespace {
 double noteToHz(double note) { return 440.0 * std::pow(2.0, (note - 69.0) / 12.0); }
 constexpr float kChokeFadeSec = 0.005f;  // 5 ms: fast enough to read as a choke, slow enough not to click
+constexpr float kQuietLevel = 1.f / 8388608.f;  // one 24-bit LSB (2^-23): below anything an export can hold
 }  // namespace
 
 Engine::Engine(float sampleRate, int captureSeconds)
@@ -248,10 +249,11 @@ void Engine::renderVoice(Voice& v, float& l, float& r) {
     const double glided = v.glidePos >= 1 ? v.toHz : v.fromHz * std::pow(v.toHz / v.fromHz, v.glidePos);
     v.glidePos = std::min(1.0, v.glidePos + v.glideStep);
     const double hz = glided * std::exp2(v.punchSemis * v.punchEnv / 12.0);
-    v.punchEnv *= v.punchDecay;
+    // envelopes stop at exact 0 instead of decaying into subnormals on long notes (WASM has no flush-to-zero)
+    v.punchEnv = v.punchEnv > 1e-6f ? v.punchEnv * v.punchDecay : 0.f;
     const float env = v.amp * std::min(1.f, v.attack) * fade * std::max(0.f, v.release);
     v.attack += 1.f / (0.001f * sr_);  // 1 ms attack: keeps the click of a real 808 without a pop
-    v.amp *= v.ampDecay;
+    v.amp = v.amp > kQuietLevel ? v.amp * v.ampDecay : 0.f;
     const float s = env * static_cast<float>(std::sin(v.phase));
     v.phase += 2 * std::numbers::pi * hz / sr_;
     if (v.phase > 2 * std::numbers::pi) v.phase -= 2 * std::numbers::pi;
@@ -336,6 +338,12 @@ void Engine::process(const float* in, float* outL, float* outR, int frames) {
       }
     }
     mixer_->master(l, r, n);
+    // WASM has no flush-to-zero: idle reverb/filter tails sink into subnormal floats (slow on x86) and stay there.
+    // After 1 s below one 24-bit LSB nothing audible or exportable is left, so clear the mixer to exact zeros.
+    float peak = 0.f;
+    for (int i = 0; i < n; ++i) peak = std::max({peak, std::fabs(l[i]), std::fabs(r[i])});
+    if (peak >= kQuietLevel) quietFrames_ = 0;
+    else if (quietFrames_ < sr_ && (quietFrames_ += n) >= sr_) mixer_->reset();
   }
   captured_.store(c, std::memory_order_release);
   if (playing_) clock_->frame.store(frame_, std::memory_order_relaxed);

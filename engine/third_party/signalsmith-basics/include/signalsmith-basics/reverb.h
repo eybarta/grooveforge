@@ -126,6 +126,7 @@ struct ReverbSTFX : public BaseEffect {
 		delay1.reset();
 		delay2.reset();
 		delay3.reset();
+		delay4.reset(); // GrooveForge patch: missing upstream (1.2.1 and main), so reset() left the last tail in delay4
 		delayFeedback.reset();
 		delayEarly.reset();
 		

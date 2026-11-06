@@ -3,11 +3,12 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
 import { boomBapDemo, trapDemo } from "@/song/demoGrooves";
-import { songToEngineEvents } from "@/song/time";
+import { emptySong } from "@/song/store";
+import { LANES, songToEngineEvents } from "@/song/time";
 import type { Song } from "@/song/types";
 import { KIT_FILES } from "./kit";
 import { LOUDNESS_TARGETS, LUFS_TOLERANCE, MAX_TRUE_PEAK_DB, masterTo } from "./master";
-import { DEFAULT_KNOBS } from "./mix";
+import { BUS_FIELDS, DEFAULT_KNOBS, STRIP_FIELDS } from "./mix";
 import { studioProgram } from "./studioRender";
 import type { EngineProgram } from "./types";
 
@@ -36,21 +37,24 @@ const decodeKit = () =>
     return [l, r] as const;
   });
 
-/** The web worklet's job (public/gf-engine-worklet.js) without Web Audio: a fresh engine per render, like renderOffline. */
-function wasmTools(kit: ReturnType<typeof decodeKit>) {
-  const mod = new WebAssembly.Module(readFileSync(WASM));
-  const stub = new Proxy({}, { get: () => new Proxy({}, { get: () => () => 0 }) });
-  const instance = () => {
-    const ex = new WebAssembly.Instance(mod, stub).exports as any;
-    ex._initialize?.();
-    const heap = (p: number, n: number) => new Float32Array(ex.memory.buffer, p, n); // after every alloc: memory may grow
-    const put = (x: Float32Array) => {
-      const p = ex.gf_alloc(Math.max(1, x.length));
-      heap(p, x.length).set(x);
-      return p;
-    };
-    return { ex, heap, put };
+let mod: WebAssembly.Module | undefined;
+const stub = new Proxy({}, { get: () => new Proxy({}, { get: () => () => 0 }) });
+/** A fresh WASM engine module instance, as the web worklet makes one (public/gf-engine-worklet.js). */
+function instance() {
+  mod ??= new WebAssembly.Module(readFileSync(WASM));
+  const ex = new WebAssembly.Instance(mod, stub).exports as any;
+  ex._initialize?.();
+  const heap = (p: number, n: number) => new Float32Array(ex.memory.buffer, p, n); // after every alloc: memory may grow
+  const put = (x: Float32Array) => {
+    const p = ex.gf_alloc(Math.max(1, x.length));
+    heap(p, x.length).set(x);
+    return p;
   };
+  return { ex, heap, put };
+}
+
+/** The worklet's job without Web Audio: a fresh engine per render, like the web renderOffline. */
+function wasmTools(kit: ReturnType<typeof decodeKit>) {
   const tools = instance();
 
   const render = (song: Song, p: EngineProgram, frames: number): Float32Array[] => {
@@ -108,4 +112,24 @@ describe.skipIf(!(existsSync(WASM) && hasSox) && !process.env.CI)("export bar (C
     expect(Math.abs(m.lufs - LOUDNESS_TARGETS[target])).toBeLessThanOrEqual(LUFS_TOLERANCE);
     expect(m.truePeakDb).toBeLessThanOrEqual(MAX_TRUE_PEAK_DB);
   }, 60_000);
+});
+
+describe.skipIf(!existsSync(WASM) && !process.env.CI)("silence after the music (WASM has no flush-to-zero)", () => {
+  it("an idle engine decays to exact zeros, never into subnormal floats", () => {
+    // one 808 note into the biggest reverb and delay, then silence (the 8-bar loop at 60 BPM is 32 s long)
+    const song: Song = {
+      ...emptySong(), bpm: 60, bars: 8, mood: "trap",
+      tracks: [{ id: "b", kind: "bass", name: "808", gainDb: 0, muted: false, frozen: false,
+        notes: [{ id: "n", tick: 0, lane: "bass", velocity: 1, offsetMs: 0, source: "user", pitch: 33, durationTicks: 960 }] }],
+    };
+    const p = studioProgram(song, { punch: 0.5, space: 1 }, 6);
+    const bass = BUS_FIELDS.length + LANES.indexOf("bass") * STRIP_FIELDS.length;
+    p.mix![bass + STRIP_FIELDS.indexOf("reverbSend")] = 1;
+    p.mix![bass + STRIP_FIELDS.indexOf("delaySend")] = 1;
+    const [l, r] = wasmTools([]).render(song, p, 25 * SR);
+    expect(songToEngineEvents(song, SR).loopFrames).toBeGreaterThan(l!.length); // nothing retriggers
+    const subnormal = (x: number) => x !== 0 && Math.abs(x) < 1.1754944e-38;
+    expect(l!.some(subnormal) || r!.some(subnormal)).toBe(false);
+    expect(l!.subarray(20 * SR).every((x) => x === 0) && r!.subarray(20 * SR).every((x) => x === 0)).toBe(true);
+  });
 });
