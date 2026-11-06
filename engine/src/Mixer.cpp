@@ -7,6 +7,9 @@ namespace gf {
 
 namespace {
 constexpr float kDbToLn = 0.11512925f;  // ln(10) / 20
+// The limiter works this far under the requested ceiling: covers its own ≤ 0.05 dB leak plus the downsampling
+// filters' ripple (~0.1 dB), so the 48 kHz output's true peak stays at or under limitDb (mix_test proves it).
+constexpr float kTruePeakMarginDb = 0.3f;
 
 template <class Design>
 void design(auto& eq, bool on, Design d) {
@@ -49,6 +52,12 @@ Mixer::Mixer(float sampleRate)
   reverb_.configure(sr_, kBlock, 2);
   reverb_.dry = 0;  // a send: wet only
   delay_.resize(2, maxDelayFrames_ + kBlock + 1);
+  limiter_.configure(4 * sr_, 4 * kBlock, 2);
+  limiter_.attackMs = 2;  // = lookahead
+  limiter_.holdMs = 2;
+  limiter_.releaseMs = 60;
+  limiter_.smoothingStages = 1;  // measured: the 2-stage mode lets peaks through at heavy (> 30 dB) gain reduction
+  limiter_.linkChannels = 1;  // one gain for both sides: the stereo image doesn't wander
 }
 
 void Mixer::apply(const Mix& mix, int strips) {
@@ -101,6 +110,18 @@ void Mixer::apply(const Mix& mix, int strips) {
     reverb_.rt20 = b_.reverbRt20;
     reverb_.highCutHz = b_.reverbHighCutHz;
   }
+  const bool master = b_.limitDb < 0;
+  if (master) {
+    limiter_.inputGain = std::exp(b_.masterGainDb * kDbToLn);
+    ceiling_ = std::exp((b_.limitDb - kTruePeakMarginDb) * kDbToLn);
+    limiter_.outputLimit = ceiling_;
+    if (!masterOn_) {
+      up1_.reset();
+      up2_.reset();
+      limiter_.reset();
+    }
+  }
+  masterOn_ = master;
   delayFrames_ = std::clamp(static_cast<int>(std::lround(b_.delaySec * sr_)), 1, maxDelayFrames_);
   for (auto& f : delayLpf_) f.lowpass(std::max(100.f, b_.delayLpfHz) / sr_);
 }
@@ -124,6 +145,9 @@ void Mixer::reset() {
   reverb_.reset();
   delay_.reset();
   for (auto& f : delayLpf_) f.reset();
+  up1_.reset();
+  up2_.reset();
+  limiter_.reset();
 }
 
 template <class Fx>
@@ -225,6 +249,25 @@ void Mixer::process(int strips, float* outL, float* outR, int n) {
     }
     delay_ += n;
   }
+}
+
+void Mixer::master(float* l, float* r, int n) {
+  if (!masterOn_) return;
+  float* io[2] = {l, r};
+  up1_.up(io, n);
+  float* mid[2] = {up1_[0], up1_[1]};
+  up2_.up(mid, 2 * n);
+  float* hi[2] = {up2_[0], up2_[1]};
+  float* hiOut[2] = {hiL_, hiR_};
+  float** pi = hi;
+  float** po = hiOut;
+  limiter_.process(pi, po, static_cast<size_t>(4 * n));
+  for (int i = 0; i < 4 * n; ++i) {  // safety clip for what the limiter leaks; at 4× rate it's inaudible
+    up2_[0][i] = std::clamp(hiL_[i], -ceiling_, ceiling_);
+    up2_[1][i] = std::clamp(hiR_[i], -ceiling_, ceiling_);
+  }
+  up2_.down(mid, 2 * n);  // into stage 1's buffer, which its own down() then reads
+  up1_.down(io, n);
 }
 
 }  // namespace gf

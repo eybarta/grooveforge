@@ -4,10 +4,12 @@
 #include <audioapi/compatibility/StableAPI.h>
 #include <jsi/jsi.h>
 
+#include <algorithm>
 #include <cstring>
 #include <memory>
 
 #include "gf/Engine.h"
+#include "gf/Loudness.h"
 
 namespace gf {
 
@@ -95,6 +97,18 @@ class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
     engine_->setMix(reinterpret_cast<const float *>(buffer.data(runtime)), static_cast<int>(buffer.size(runtime) / sizeof(float)));
     return jsi::Value::undefined();
   }
+  // loudness(left: ArrayBuffer, right: ArrayBuffer) → { lufs, truePeakDb } (EBU R128, at the engine's rate)
+  JSI_HOST_FUNCTION_DECL(loudness) {
+    auto left = args[0].asObject(runtime).getArrayBuffer(runtime);
+    auto right = args[1].asObject(runtime).getArrayBuffer(runtime);
+    const auto frames = static_cast<int>(std::min(left.size(runtime), right.size(runtime)) / sizeof(float));
+    const auto m = gf::measureLoudness(reinterpret_cast<const float *>(left.data(runtime)),
+                                       reinterpret_cast<const float *>(right.data(runtime)), frames, engine_->sampleRate());
+    jsi::Object result(runtime);
+    result.setProperty(runtime, "lufs", m.lufs);
+    result.setProperty(runtime, "truePeakDb", m.truePeakDb);
+    return result;
+  }
   // loadSample(slot, left: ArrayBuffer, right: ArrayBuffer | null, sampleRate) → boolean
   JSI_HOST_FUNCTION_DECL(loadSample) {
     auto left = args[1].asObject(runtime).getArrayBuffer(runtime);
@@ -135,6 +149,7 @@ class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, setInstruments),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, setZones),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, setMix),
+                 JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, loudness),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, loadSample),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, play),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, stop),

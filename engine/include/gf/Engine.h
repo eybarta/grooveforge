@@ -15,7 +15,7 @@ constexpr int kInstrumentStride = 8;
 /** Flat zone row: [instrument, maxVelocity, sampleSlot]. Rows of one instrument and maxVelocity form a layer. */
 constexpr int kZoneStride = 3;
 /** Flat mix for setMix(): kBusParams bus values (Buses order), then one kStripStride row per instrument (Strip order). */
-constexpr int kBusParams = 18;
+constexpr int kBusParams = 20;
 constexpr int kStripStride = 16;
 constexpr int kMaxVoices = 32;
 constexpr int kMaxSamples = 256;
@@ -76,6 +76,7 @@ struct Buses {
   float busLpfHz = 0;                                       // drum-bus low-pass; 0 = off
   float reverbRoomMs = 60, reverbRt20 = 1, reverbHighCutHz = 9000, reverbReturn = 0;  // return 0 = off
   float delaySec = 0.375f, delayFeedback = 0.3f, delayLpfHz = 5000, delayReturn = 0;  // ping-pong; return 0 = off
+  float masterGainDb = 0, limitDb = 0;  // master: gain into a 4× oversampled limiter (true-peak ceiling); limit ≥ 0 = off
 };
 
 struct Mix {

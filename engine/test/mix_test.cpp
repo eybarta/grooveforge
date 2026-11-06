@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "gf/Loudness.h"
 #include "helpers.h"
 
 namespace {
@@ -156,7 +157,7 @@ int main() {
   // everything on: identical output whatever block size the host uses (128, odd, larger than the mixer's chunk)
   {
     gf::Buses b;
-    b = {-18, 3, 20, 150, -30, 6, 0.4f, 3, 7000, 11000, 60, 1, 9000, 0.6f, 0.3f, 0.4f, 4000, 0.5f};
+    b = {-18, 3, 20, 150, -30, 6, 0.4f, 3, 7000, 11000, 60, 1, 9000, 0.6f, 0.3f, 0.4f, 4000, 0.5f, 6, -1};
     std::vector<gf::Strip> strips(2);
     strips[0] = {0, 40, 80, 2, 400, -3, 6000, 2, 0, 4, -2, 0, 8000, 20, 0.2f, 0.1f};
     strips[1] = {1, 25, 60, 1, 1000, 0, 8000, 0, 0, 0, 0, 4, 5000, 20, 0, 0};
@@ -183,6 +184,37 @@ int main() {
     std::printf("full mix: peak %.3f, max diff across block sizes %.2e\n", peak(a.l, 0, a.l.size()), diff);
     assert(diff < 1e-4f);
     assert(peak(a.l, 0, a.l.size()) > 0.1f);
+  }
+
+  // libebur128 against EBU Tech 3341 case 1: a stereo 1 kHz sine at −23 dBFS reads −23.0 LUFS
+  {
+    std::vector<float> s(20 * 48000);
+    for (size_t i = 0; i < s.size(); ++i) s[i] = std::pow(10.f, -23.f / 20) * std::sin(2 * M_PI * 1000 * i / kSr);
+    const auto m = gf::measureLoudness(s.data(), s.data(), static_cast<int>(s.size()), kSr);
+    std::printf("EBU 3341 #1: %.2f LUFS, %.2f dBTP\n", m.lufs, m.truePeakDb);
+    assert(std::fabs(m.lufs + 23) < 0.1 && std::fabs(m.truePeakDb + 23) < 0.1);
+  }
+
+  // master: +18 dB into the 4× oversampled limiter at −1 dB keeps the true peak (BS.1770, 4×) at or under −1 dBTP
+  {
+    gf::Buses b;
+    b.masterGainDb = 18;
+    b.limitDb = -1;
+    gf::Strip s;
+    s.highDb = 12;  // bright: inter-sample peaks are where a plain sample-peak limiter fails
+    std::vector<float> ev;
+    for (int k = 0; k < 16; ++k) ev.insert(ev.end(), {k * 6000.f, 0, 1.f, hzNote(5000 + 700.f * k), 3000.f, -1.f});
+    gf::Engine e(kSr);
+    e.setInstruments(kSine.data(), 1);
+    e.setEvents(ev.data(), 16, kLen);
+    const auto mix = mixOf(b, {s});
+    e.setMix(mix.data(), static_cast<int>(mix.size()));
+    e.play();
+    const auto o = render(e, kLen);
+    const auto m = gf::measureLoudness(o.l.data(), o.r.data(), kLen, kSr);
+    std::printf("limiter: sample peak %.2f dB, true peak %.2f dBTP, %.1f LUFS\n", 20 * std::log10(peak(o.l, 0, kLen)),
+                m.truePeakDb, m.lufs);
+    assert(m.truePeakDb <= -1.0);
   }
 
   std::printf("mix_test OK\n");

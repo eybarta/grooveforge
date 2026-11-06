@@ -14,6 +14,18 @@ describe("wav", () => {
     for (let i = 0; i < x.length; i++) expect(Math.abs(samples[i]! - x[i]!)).toBeLessThan(2 / 2 ** 23);
   });
 
+  it("writes stereo as two channels", () => {
+    const r = x.map((v) => -v);
+    const bytes = encodeWav([x, r], 48000);
+    expect(bytes.length).toBe(44 + x.length * 3 * 2);
+    const { channels } = decodeWav(bytes);
+    expect(channels).toHaveLength(2);
+    for (let i = 0; i < x.length; i += 97) {
+      expect(Math.abs(channels[0]![i]! - x[i]!)).toBeLessThan(2 / 2 ** 23);
+      expect(Math.abs(channels[1]![i]! - r[i]!)).toBeLessThan(2 / 2 ** 23);
+    }
+  });
+
   it("keeps near-silence silent (wavefile's own quantiser turns 1e-15 into 9 LSB)", () => {
     const { samples } = decodeWav(encodeWav(Float32Array.from([1e-15, -1e-15, 1e-9]), 48000, "16"));
     expect(Array.from(samples)).toEqual([0, 0, 0]);

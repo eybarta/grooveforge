@@ -327,12 +327,15 @@ void Engine::process(const float* in, float* outL, float* outR, int frames) {
         l[i] = std::tanh(k * l[i]) * norm;
         r[i] = std::tanh(k * r[i]) * norm;
       }
+      // tapped before the master: its latency then lands inside the measured round trip, so takes and visuals stay
+      // aligned to the event timeline
       if (cap && c < capMax) {
         capIn_[c] = mic[i];
         capOut_[c] = l[i];
         ++c;
       }
     }
+    mixer_->master(l, r, n);
   }
   captured_.store(c, std::memory_order_release);
   if (playing_) clock_->frame.store(frame_, std::memory_order_relaxed);

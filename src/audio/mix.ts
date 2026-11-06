@@ -8,6 +8,7 @@ export const BUS_FIELDS = [
   "tapeDrive", "tapeToneHz", "busLpfHz",
   "reverbRoomMs", "reverbRt20", "reverbHighCutHz", "reverbReturn",
   "delaySec", "delayFeedback", "delayLpfHz", "delayReturn",
+  "masterGainDb", "limitDb",
 ] as const;
 /** gf::Strip fields in engine layout order. */
 export const STRIP_FIELDS = [
@@ -29,6 +30,7 @@ export const DEFAULT_BUSES: Buses = {
   tapeDrive: 0, tapeToneHz: 8000, busLpfHz: 0,
   reverbRoomMs: 60, reverbRt20: 1, reverbHighCutHz: 9000, reverbReturn: 0,
   delaySec: 0.375, delayFeedback: 0.3, delayLpfHz: 5000, delayReturn: 0,
+  masterGainDb: 0, limitDb: 0,
 };
 
 const DRUM_BUS = 0;
@@ -89,12 +91,18 @@ export interface Knobs {
 }
 export const DEFAULT_KNOBS: Knobs = { punch: 0.5, space: 0.5 };
 
-/** The flat mix setMix() takes: buses, then one strip per lane (LANES order = instrument index). */
-export function mixFor(mood: Mood, knobs: Knobs, bpm: number): Float32Array {
+/** True-peak ceiling of every mood's master (CLAUDE.md export bar: ≤ −1 dBTP). */
+const CEILING_DB = -1;
+
+/**
+ * The flat mix setMix() takes: buses, then one strip per lane (LANES order = instrument index).
+ * `gainDb` drives the master limiter (masterTo() finds the value that hits a loudness target).
+ */
+export function mixFor(mood: Mood, knobs: Knobs, bpm: number, gainDb = 0): Float32Array {
   const { strips, buses } = PRESETS[mood];
   const punch = 2 * knobs.punch, space = 2 * knobs.space;
   const { delayBeats, ...rest } = buses;
-  const b: Buses = { ...DEFAULT_BUSES, ...rest, delaySec: (delayBeats * 60) / bpm };
+  const b: Buses = { ...DEFAULT_BUSES, ...rest, delaySec: (delayBeats * 60) / bpm, masterGainDb: gainDb, limitDb: CEILING_DB };
   b.smashMix = Math.min(1, b.smashMix * punch);
   const rows = LANES.map((lane) => {
     const s: Strip = { ...DEFAULT_STRIP, ...strips[lane] };

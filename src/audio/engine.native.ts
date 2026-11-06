@@ -98,19 +98,20 @@ export async function createAudioEngine(): Promise<AudioEngine> {
       src.start();
       playback = src;
     },
-    async renderOffline(song, drive, frames) {
+    async renderOffline(song, drive, frames, override) {
       const length = frames ?? songToEngineEvents(song, SAMPLE_RATE).loopFrames;
       const off = new OfflineAudioContext({ numberOfChannels: 2, length, sampleRate: SAMPLE_RATE });
       const n = new GfEngineNode(off, 1);
       n.connect(off.destination);
       for (const [slot, s] of samples) loadSample(n, slot, s);
-      setProgram(n, program);
+      setProgram(n, override ?? program);
       setSong(n, song, SAMPLE_RATE);
       n.engine.setDrive(drive);
       n.engine.play();
       const out = await off.startRendering();
       return [out.getChannelData(0).slice(), out.getChannelData(1).slice()];
     },
+    loudness: async ([l, r = l]) => node.engine.loudness(ab(l!), ab(r!)),
     async close() {
       await recorder.stop();
       await ctx.close();

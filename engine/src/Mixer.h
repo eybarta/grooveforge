@@ -6,9 +6,11 @@
 #include "gf/Engine.h"
 #include "signalsmith-basics/crunch.h"
 #include "signalsmith-basics/dynamics.h"
+#include "signalsmith-basics/limiter.h"
 #include "signalsmith-basics/reverb.h"
 #include "signalsmith-dsp/delay.h"
 #include "signalsmith-dsp/filters.h"
+#include "signalsmith-dsp/rates.h"
 
 namespace gf {
 
@@ -26,6 +28,8 @@ class Mixer {
   void reset();
   /** Writes the mixed chunk (n ≤ kBlock) to out. */
   void process(int strips, float* outL, float* outR, int n);
+  /** Master, in place: gain → limiter at 4× the rate (so inter-sample peaks obey the ceiling). Off while limitDb ≥ 0. */
+  void master(float* l, float* r, int n);
 
  private:
   using Biquad = signalsmith::filters::BiquadStatic<float>;
@@ -61,8 +65,13 @@ class Mixer {
   Biquad delayLpf_[2];
   int delayFrames_ = 1, maxDelayFrames_;
 
+  bool masterOn_ = false;
+  float ceiling_ = 1;  // linear, at the 4× rate
+  signalsmith::rates::Oversampler2xFIR<float> up1_{2, kBlock}, up2_{2, 2 * kBlock};  // 48 → 96 → 192 kHz
+  signalsmith::basics::LimiterFloat limiter_;
+
   float drumL_[kBlock], drumR_[kBlock], revL_[kBlock], revR_[kBlock], delL_[kBlock], delR_[kBlock];
-  float scratchL_[kBlock], scratchR_[kBlock];
+  float scratchL_[kBlock], scratchR_[kBlock], hiL_[4 * kBlock], hiR_[4 * kBlock];
 };
 
 }  // namespace gf

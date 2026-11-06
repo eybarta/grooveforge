@@ -1,13 +1,21 @@
 cmake_minimum_required(VERSION 3.20)
-project(gf_engine CXX)
+project(gf_engine C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library(gf_engine STATIC src/Engine.cpp src/Mixer.cpp)
+# vendored (engine/third_party/README.md); SYSTEM / -w so their warnings don't fail our -Werror
+add_library(ebur128 STATIC third_party/libebur128/ebur128.c)
+target_include_directories(ebur128 SYSTEM PUBLIC third_party/libebur128)
+target_compile_options(ebur128 PRIVATE -w)
+if(UNIX AND NOT APPLE)
+  target_link_libraries(ebur128 PRIVATE m)
+endif()
+
+add_library(gf_engine STATIC src/Engine.cpp src/Mixer.cpp src/Loudness.cpp)
 target_include_directories(gf_engine PUBLIC include)
-# vendored (engine/third_party/README.md); SYSTEM so their warnings don't fail our -Werror
 target_include_directories(gf_engine SYSTEM PRIVATE third_party third_party/signalsmith-basics/include)
+target_link_libraries(gf_engine PRIVATE ebur128)
 
 # Host tests only when built on its own (the iOS/Android/WASM builds compile src/ directly).
 if(PROJECT_IS_TOP_LEVEL)

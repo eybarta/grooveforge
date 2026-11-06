@@ -1,4 +1,5 @@
 import type { Song } from "@/song/types";
+import type { Measured } from "./master";
 
 /** The engine's transport clock, readable every frame from the UI thread (worklets) without touching React state. */
 export interface AudioClock {
@@ -49,8 +50,10 @@ export interface AudioEngine {
   route(): Promise<{ inputs: string[]; outputs: string[] }>;
   /** Plays samples once through the live context, one array per channel (for listening back to takes). */
   playBuffer(channels: Float32Array[]): void;
-  /** Renders `song` offline through the same engine, kit and program: one loop, or `frames` frames. [L, R]. */
-  renderOffline(song: Song, drive: number, frames?: number): Promise<Float32Array[]>;
+  /** Renders `song` offline through the same engine, kit and program (or `program`): one loop, or `frames`. [L, R]. */
+  renderOffline(song: Song, drive: number, frames?: number, program?: EngineProgram): Promise<Float32Array[]>;
+  /** EBU R128 integrated loudness + true peak (libebur128 in the engine). */
+  loudness(channels: Float32Array[]): Promise<Measured>;
   close(): Promise<void>;
 }
 

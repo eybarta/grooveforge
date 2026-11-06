@@ -1,5 +1,6 @@
 // C ABI over gf::Engine for the web build (standalone WASM, loaded by public/gf-engine-worklet.js).
 #include "gf/Engine.h"
+#include "gf/Loudness.h"
 
 extern "C" {
 
@@ -17,6 +18,12 @@ void gf_set_events(gf::Engine* e, const float* flat, int rows, double loopFrames
 void gf_set_instruments(gf::Engine* e, const float* flat, int count) { e->setInstruments(flat, count); }
 void gf_set_zones(gf::Engine* e, const float* flat, int rows) { e->setZones(flat, rows); }
 void gf_set_mix(gf::Engine* e, const float* flat, int length) { e->setMix(flat, length); }
+/** out[0] = integrated LUFS, out[1] = true peak dBTP. Needs no engine (the web main thread calls it on its own instance). */
+void gf_loudness(const float* l, const float* r, int frames, float sampleRate, float* out) {
+  const auto m = gf::measureLoudness(l, r, frames, sampleRate);
+  out[0] = static_cast<float>(m.lufs);
+  out[1] = static_cast<float>(m.truePeakDb);
+}
 int gf_load_sample(gf::Engine* e, int slot, const float* l, const float* r, int frames, float sampleRate) {
   return e->loadSample(slot, l, r, frames, sampleRate) ? 1 : 0;
 }

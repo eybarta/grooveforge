@@ -62,6 +62,22 @@ function webClock(ctx: AudioContext) {
   return { clock, state };
 }
 
+interface WasmTools {
+  memory: WebAssembly.Memory;
+  gf_alloc(floats: number): number;
+  gf_free(ptr: number): void;
+  gf_loudness(l: number, r: number, frames: number, sampleRate: number, out: number): void;
+}
+
+/** The same gf-engine.wasm the worklet runs, instantiated on the main thread for its stateless tools (loudness). */
+async function wasmTools(bytes: ArrayBuffer): Promise<WasmTools> {
+  // as in the worklet: the few WASI imports are only reached on abort paths
+  const imports = new Proxy({}, { get: () => new Proxy({}, { get: () => () => 0 }) }) as WebAssembly.Imports;
+  const { instance } = await WebAssembly.instantiate(bytes.slice(0), imports);
+  (instance.exports._initialize as (() => void) | undefined)?.();
+  return instance.exports as unknown as WasmTools;
+}
+
 export async function createAudioEngine(): Promise<AudioEngine> {
   const wasmBytes = await (await fetch("/gf-engine.wasm")).arrayBuffer();
   const ctx = new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: "interactive" });
@@ -76,6 +92,7 @@ export async function createAudioEngine(): Promise<AudioEngine> {
   const samples = new Map<number, DecodedSample>();
   await live.setProgram(program);
   let mic: MediaStream | null = null;
+  let tools: Promise<WasmTools> | null = null; // a main-thread instance of the engine's WASM, for measuring
   let playback: ReturnType<typeof ctx.createBufferSource> | null = null; // Stop also cuts take playback
 
   return {
@@ -139,18 +156,31 @@ export async function createAudioEngine(): Promise<AudioEngine> {
       src.start();
       playback = src;
     },
-    async renderOffline(song, drive, frames) {
+    async renderOffline(song, drive, frames, override) {
       const length = frames ?? songToEngineEvents(song, SAMPLE_RATE).loopFrames;
       const off = new OfflineAudioContext(2, length, SAMPLE_RATE);
       const e = await engineNode(off, wasmBytes.slice(0));
       e.node.connect(off.destination);
       for (const [slot, s] of samples) await e.loadSample(slot, s);
-      await e.setProgram(program);
+      await e.setProgram(override ?? program);
       await e.setSong(song);
       await e.call({ type: "drive", amount: drive });
       await e.call({ type: "play" }); // replies arrive in order, so the engine is ready before rendering starts
       const out = await off.startRendering();
       return [out.getChannelData(0), out.getChannelData(1)];
+    },
+    async loudness([l, r = l]) {
+      tools ??= wasmTools(wasmBytes);
+      const ex = await tools;
+      const n = l!.length;
+      const pl = ex.gf_alloc(n), pr = ex.gf_alloc(n), po = ex.gf_alloc(2);
+      const heap = (p: number, len: number) => new Float32Array(ex.memory.buffer, p, len); // after every alloc: memory may grow
+      heap(pl, n).set(l!);
+      heap(pr, n).set(r!);
+      ex.gf_loudness(pl, pr, n, SAMPLE_RATE, po);
+      const [lufs, truePeakDb] = heap(po, 2);
+      for (const p of [pl, pr, po]) ex.gf_free(p);
+      return { lufs: lufs!, truePeakDb: truePeakDb! };
     },
     async close() {
       mic?.getTracks().forEach((t) => t.stop());
