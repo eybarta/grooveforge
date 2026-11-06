@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { alignTake } from "@/audio/latency";
 import { saveWav } from "@/audio/saveWav";
 import { createSpikeAudio } from "@/audio/spike";
-import { calibrate, verifyAlignment } from "@/audio/spikeRuns";
+import { calibrate, mixTakeWithLoop, verifyAlignment } from "@/audio/spikeRuns";
 import { HOST_REFERENCE, loopSong } from "@/audio/spikeSongs";
 import type { SpikeAudio } from "@/audio/types";
 import { encodeWav, fingerprint } from "@/audio/wav";
@@ -20,7 +20,7 @@ export default function Spike() {
   const [route, setRoute] = useState<Route>("wired");
   const [drive, setDrive] = useState(0);
   const [rtlMs, setRtlMs] = useState<number | null>(null);
-  const [take, setTake] = useState<Float32Array | null>(null);
+  const [take, setTake] = useState<{ input: Float32Array; output: Float32Array } | null>(null);
   const [log, setLog] = useState<string[]>([]);
   // dev hook: grooveforge://spike?auto=render runs the offline render on launch (no share sheet), for headless checks
   const { auto } = useLocalSearchParams<{ auto?: string }>();
@@ -52,11 +52,11 @@ export default function Spike() {
     a.captureStart(); // capture + wall clock both start once audio flows (start() includes mic/session startup)
     const t0 = Date.now();
     await new Promise((r) => setTimeout(r, SOAK_CAPTURE_SEC * 1000));
-    const { input } = await a.captureStop();
+    const { input, output } = await a.captureStop();
     const elapsed = (Date.now() - t0) / 1000;
     // the audio callback should process frames at the sample rate; a stalled callback shows up as a ratio < 1
     report("soak capture", { capturedSec: input.length / a.sampleRate, wallSec: elapsed, ratio: input.length / a.sampleRate / elapsed });
-    setTake(rtlMs === null ? input : alignTake(input, (rtlMs / 1000) * a.sampleRate));
+    setTake({ input, output });
     await new Promise((r) => setTimeout(r, (SOAK_SEC - SOAK_CAPTURE_SEC) * 1000));
     await a.stop();
     report("soak done", { seconds: SOAK_SEC, listenFor: "clicks/dropouts in the loop", reported: a.reportedLatency() });
@@ -95,8 +95,18 @@ export default function Spike() {
 
   const saveTake = () => run("Save take", async (a) => {
     if (!take) throw new Error("record a loop first");
-    await saveWav(encodeWav(take, a.sampleRate), `gf-take-${route}${rtlMs === null ? "-unaligned" : ""}.wav`);
+    await saveWav(encodeWav(alignTake(take.input, rtlFrames(a)), a.sampleRate), `gf-take-${route}${rtlMs === null ? "-unaligned" : ""}.wav`);
   });
+
+  const playTake = () => run("Play take + loop", async (a) => {
+    if (!take) throw new Error("record a loop first");
+    await a.stop();
+    const mix = mixTakeWithLoop(take.input, take.output, rtlFrames(a));
+    a.playBuffer(mix);
+    report("playing take + loop", { seconds: mix.length / a.sampleRate, shiftedMs: rtlMs ?? 0 });
+  });
+
+  const rtlFrames = (a: SpikeAudio) => ((rtlMs ?? 0) / 1000) * a.sampleRate;
 
   // bypasses run()'s busy guard on purpose: Stop has to work while a step is running
   const stop = () => void audio?.stop().then(() => report("stopped", {}));
@@ -127,6 +137,7 @@ export default function Spike() {
       <Btn label="2 · Calibrate latency (hold earbud to mic)" onPress={cal} busy={busy} disabled={!audio} />
       <Btn label="3 · Verify shift" onPress={verify} busy={busy} disabled={!audio || rtlMs === null} />
       <Btn label="4 · Render WAV offline" onPress={() => render()} busy={busy} disabled={!audio} />
+      <Btn label="Play take + loop" onPress={playTake} busy={busy} disabled={!take} />
       <Btn label="Save last take" onPress={saveTake} busy={busy} disabled={!take} />
       <Btn label="Stop" onPress={stop} busy={null} disabled={!audio} />
 

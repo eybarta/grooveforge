@@ -45,3 +45,12 @@ export async function verifyAlignment(audio: SpikeAudio, rtlMs: number) {
   const aligned = alignTake(input, (rtlMs / 1000) * audio.sampleRate);
   return summarize(estimateLags(output, aligned, audio.sampleRate, -0.01, 0.05), audio.sampleRate);
 }
+
+/**
+ * Your take over the loop you heard: mic input shifted by the round trip, plus the engine's own output capture.
+ * Both were captured on the engine's frame clock, so the mix is sample-accurate (no scheduling guesswork).
+ */
+export function mixTakeWithLoop(input: Float32Array, output: Float32Array, rtlFrames: number): Float32Array {
+  const take = alignTake(input, rtlFrames);
+  return Float32Array.from(take, (x, i) => Math.max(-1, Math.min(1, 0.9 * x + 0.5 * output[i]!)));
+}

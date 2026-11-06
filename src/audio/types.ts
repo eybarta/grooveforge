@@ -15,6 +15,8 @@ export interface SpikeAudio {
   captureStop(): Promise<{ input: Float32Array; output: Float32Array }>;
   /** OS / browser reported latencies in seconds, for comparison with the measured round trip. */
   reportedLatency(): Record<string, number>;
+  /** Plays mono samples once through the live context (for listening back to takes). */
+  playBuffer(samples: Float32Array): void;
   /** Renders exactly one loop of `song` offline through the same engine. */
   renderOffline(song: Song, drive: number): Promise<Float32Array>;
   close(): Promise<void>;

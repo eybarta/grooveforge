@@ -50,6 +50,14 @@ export async function createSpikeAudio(): Promise<SpikeAudio> {
       baseLatency: ctx.baseLatency,
       inputLatency: recorder.inputLatency,
     }),
+    playBuffer(samples) {
+      const b = ctx.createBuffer(1, samples.length, ctx.sampleRate);
+      b.getChannelData(0).set(samples);
+      const src = ctx.createBufferSource();
+      src.buffer = b;
+      src.connect(ctx.destination);
+      src.start();
+    },
     async renderOffline(song, drive) {
       const { loopFrames } = songToEngineEvents(song, SAMPLE_RATE);
       const off = new OfflineAudioContext({ numberOfChannels: 1, length: loopFrames, sampleRate: SAMPLE_RATE });
