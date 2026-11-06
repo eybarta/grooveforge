@@ -40,6 +40,7 @@ export async function createSpikeAudio(): Promise<SpikeAudio> {
   const engine = await engineNode(ctx, wasmBytes.slice(0));
   engine.node.connect(ctx.destination);
   let mic: MediaStream | null = null;
+  let playback: ReturnType<typeof ctx.createBufferSource> | null = null; // Stop also cuts take playback
 
   return {
     platform: `web (${navigator.userAgent.match(/(Chrome|Firefox|Safari)\/[\d.]+/)?.[0] ?? "browser"})`,
@@ -56,7 +57,11 @@ export async function createSpikeAudio(): Promise<SpikeAudio> {
       await ctx.resume();
       await engine.call({ type: "play" });
     },
-    stop: async () => void (await engine.call({ type: "stop" })),
+    async stop() {
+      playback?.stop();
+      playback = null;
+      await engine.call({ type: "stop" });
+    },
     setDrive: (amount) => void engine.call({ type: "drive", amount }),
     captureStart: () => void engine.call({ type: "captureStart" }),
     captureStop: async () => {
@@ -80,6 +85,7 @@ export async function createSpikeAudio(): Promise<SpikeAudio> {
       src.buffer = b;
       src.connect(ctx.destination);
       src.start();
+      playback = src;
     },
     async renderOffline(song, drive) {
       const probe = songToEngineEvents(song, SAMPLE_RATE);

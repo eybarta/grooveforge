@@ -25,6 +25,7 @@ export async function createSpikeAudio(): Promise<SpikeAudio> {
   // CLAUDE.md: mic processing off (no AEC / NS / AGC)
   const recorder = new AudioRecorder({ androidInputPreset: "unprocessed", iosVoiceProcessing: false });
   recorder.connect(ctx, node);
+  let playback: ReturnType<typeof ctx.createBufferSource> | null = null; // Stop also cuts take playback
 
   return {
     platform: `${Platform.OS} ${Platform.Version} (react-native-audio-api 1.0.0)`,
@@ -38,7 +39,11 @@ export async function createSpikeAudio(): Promise<SpikeAudio> {
       if (ctx.state === "suspended") await ctx.resume();
       node.engine.play();
     },
-    stop: async () => node.engine.stop(),
+    async stop() {
+      playback?.stop();
+      playback = null;
+      node.engine.stop();
+    },
     setDrive: (amount) => node.engine.setDrive(amount),
     captureStart: () => node.engine.captureStart(),
     captureStop: async () => {
@@ -62,6 +67,7 @@ export async function createSpikeAudio(): Promise<SpikeAudio> {
       src.buffer = b;
       src.connect(ctx.destination);
       src.start();
+      playback = src;
     },
     async renderOffline(song, drive) {
       const { loopFrames } = songToEngineEvents(song, SAMPLE_RATE);
