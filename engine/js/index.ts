@@ -13,10 +13,12 @@ export interface GfClock {
 export interface GfEngine {
   /** Flat [frame, instrument, velocity, note, durationFrames, glideNote] rows. Safe while playing (lock-free swap). */
   setEvents(events: ArrayBuffer, loopFrames: number): void;
-  /** Flat [kind, chokeGroup, gain, pan] rows, indexed by the events' instrument field. */
+  /** Flat [kind, chokeGroup, gain, pan, p1..p4] rows, indexed by the events' instrument field. */
   setInstruments(instruments: ArrayBuffer): void;
   /** Flat [instrument, maxVelocity, sampleSlot] rows: velocity layers + round-robins of sampled instruments. */
   setZones(zones: ArrayBuffer): void;
+  /** Bus values, then one channel-strip row per instrument (src/audio/mix.ts). Empty = transparent. */
+  setMix(mix: ArrayBuffer): void;
   /** Copies decoded audio into a write-once slot. Returns false if the slot is taken or invalid. */
   loadSample(slot: number, left: ArrayBuffer, right: ArrayBuffer | null, sampleRate: number): boolean;
   play(): void;

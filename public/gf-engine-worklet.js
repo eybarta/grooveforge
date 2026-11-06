@@ -50,6 +50,14 @@ class GfEngineProcessor extends AudioWorkletProcessor {
         ex.gf_free(p);
         break;
       }
+      case "mix": {
+        const n = msg.mix.length;
+        const p = ex.gf_alloc(Math.max(1, n));
+        this.heap(p, n).set(msg.mix);
+        ex.gf_set_mix(e, p, n); // kBusParams, then rows of kStripStride
+        ex.gf_free(p);
+        break;
+      }
       case "sample": {
         // copied into the engine's own storage; the temp buffers are freed right away
         const n = msg.l.length;

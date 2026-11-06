@@ -16,6 +16,7 @@ void gf_set_events(gf::Engine* e, const float* flat, int rows, double loopFrames
 }
 void gf_set_instruments(gf::Engine* e, const float* flat, int count) { e->setInstruments(flat, count); }
 void gf_set_zones(gf::Engine* e, const float* flat, int rows) { e->setZones(flat, rows); }
+void gf_set_mix(gf::Engine* e, const float* flat, int length) { e->setMix(flat, length); }
 int gf_load_sample(gf::Engine* e, int slot, const float* l, const float* r, int frames, float sampleRate) {
   return e->loadSample(slot, l, r, frames, sampleRate) ? 1 : 0;
 }

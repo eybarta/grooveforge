@@ -10,6 +10,7 @@ const ab = (x: Float32Array) => x.buffer.slice(x.byteOffset, x.byteOffset + x.by
 function setProgram(node: GfEngineNode, p: EngineProgram) {
   node.engine.setInstruments(ab(p.instruments));
   if (p.zones) node.engine.setZones(ab(p.zones));
+  node.engine.setMix(ab(p.mix ?? new Float32Array(0)));
 }
 
 function setSong(node: GfEngineNode, song: Song, sampleRate: number) {

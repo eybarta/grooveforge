@@ -13,7 +13,8 @@ Pod::Spec.new do |s|
   s.platforms    = { :ios => "16.4" }
   s.source       = { :git => "https://github.com/eybarta/grooveforge.git" }
 
-  s.source_files = "src/**/*.cpp", "include/**/*.h", "rn/**/*.{cpp,h}", "ios/**/*.{mm,h}"
+  s.source_files = "src/**/*.{cpp,h}", "include/**/*.h", "rn/**/*.{cpp,h}", "ios/**/*.{mm,h}"
+  s.preserve_paths = "third_party/**/*"
 
   s.dependency "RNAudioAPI"
   s.dependency "React-jsi"
@@ -22,6 +23,8 @@ Pod::Spec.new do |s|
     "HEADER_SEARCH_PATHS" => [
       '"$(PODS_TARGET_SRCROOT)/include"',
       '"$(PODS_TARGET_SRCROOT)/rn"',
+      '"$(PODS_TARGET_SRCROOT)/third_party"',
+      '"$(PODS_TARGET_SRCROOT)/third_party/signalsmith-basics/include"',
       '"$(PODS_ROOT)/Headers/Public/RNAudioAPI"',
       '"$(PODS_ROOT)/Headers/Private/ReactCodegen"',
       '"$(PODS_ROOT)/../build/generated/ios/ReactCodegen"',

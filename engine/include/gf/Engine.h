@@ -14,6 +14,9 @@ constexpr int kEventStride = 6;
 constexpr int kInstrumentStride = 8;
 /** Flat zone row: [instrument, maxVelocity, sampleSlot]. Rows of one instrument and maxVelocity form a layer. */
 constexpr int kZoneStride = 3;
+/** Flat mix for setMix(): kBusParams bus values (Buses order), then one kStripStride row per instrument (Strip order). */
+constexpr int kBusParams = 18;
+constexpr int kStripStride = 16;
 constexpr int kMaxVoices = 32;
 constexpr int kMaxSamples = 256;
 constexpr int kMaxInstruments = 64;
@@ -52,13 +55,44 @@ struct Event {
   float glideNote;  // Bass808: the pitch this note slides in from (< 0: no glide)
 };
 
+/** Per-instrument channel strip, in signal order. A stage at its default is bypassed, so the default strip is transparent. */
+struct Strip {
+  int bus = 1;                        // 0 = drum bus, 1 = straight to master
+  float hpfHz = 0;                    // 0 = off
+  float lowHz = 100, lowDb = 0;       // low shelf
+  float midHz = 1000, midDb = 0;      // bell, 1 octave
+  float highHz = 8000, highDb = 0;    // high shelf
+  float lpfHz = 0;                    // 0 = off
+  float attackDb = 0, sustainDb = 0;  // transient shaper
+  float satDrive = 0, satToneHz = 8000, satCutHz = 20;  // oversampled saturation (Crunch); drive 0 = off, else input gain
+  float reverbSend = 0, delaySend = 0;
+};
+
+/** Drum bus, sends and returns. Defaults bypass everything. */
+struct Buses {
+  float glueThreshDb = 0, glueRatio = 1, glueAttackMs = 20, glueReleaseMs = 150;  // drum-bus compressor; ratio 1 = off
+  float smashThreshDb = -30, smashRatio = 1, smashMix = 0;  // parallel compression (wet/dry); ratio 1 = off
+  float tapeDrive = 0, tapeToneHz = 8000;                   // drum-bus saturation; 0 = off
+  float busLpfHz = 0;                                       // drum-bus low-pass; 0 = off
+  float reverbRoomMs = 60, reverbRt20 = 1, reverbHighCutHz = 9000, reverbReturn = 0;  // return 0 = off
+  float delaySec = 0.375f, delayFeedback = 0.3f, delayLpfHz = 5000, delayReturn = 0;  // ping-pong; return 0 = off
+};
+
+struct Mix {
+  std::vector<Strip> strips;  // per instrument; missing ones are default (transparent)
+  Buses buses;
+};
+
 /** Everything the audio thread plays from. Immutable once published, so it can be swapped without locks. */
 struct Program {
   std::vector<Event> events;  // sorted by frame
   std::vector<Instrument> instruments;
   std::vector<std::vector<Layer>> zones;  // per instrument, ascending maxVelocity (sampler instruments only)
+  Mix mix;
   int64_t loopFrames = 0;
 };
+
+class Mixer;
 
 /**
  * Lock-free transport state for readers on other threads (the UI-thread beam via a JSI host object).
@@ -81,6 +115,8 @@ class Engine {
   void setEvents(const float* flat, int rows, int64_t loopFrames);
   void setInstruments(const float* flat, int count);
   void setZones(const float* flat, int rows);
+  /** Strips + buses (layout: kBusParams, kStripStride). Fewer than kBusParams values resets to the transparent mix. */
+  void setMix(const float* flat, int length);
   /** Loads decoded audio into a slot (r may be null for mono). A slot can be filled once; refills are ignored. */
   bool loadSample(int slot, const float* l, const float* r, int frames, float sampleRate);
   void play();  // from loop start
@@ -122,6 +158,7 @@ class Engine {
   void adoptPending();           // audio thread
   void trigger(const Event& e);  // audio thread
   void renderVoice(Voice& v, float& l, float& r);  // audio thread: adds the voice's next frame
+  int strips() const;            // audio thread: mixer strips in use (one per instrument)
 
   float sr_;
 
@@ -137,6 +174,7 @@ class Engine {
   size_t next_ = 0;       // next event in active_ for the current loop pass
   std::atomic<float> drive_{0.f};
 
+  std::unique_ptr<Mixer> mixer_;  // audio thread only (built and configured in the constructor)
   Voice voices_[kMaxVoices];
   uint32_t roundRobin_[kMaxInstruments][kMaxLayers] = {};  // per velocity layer; audio thread only
 

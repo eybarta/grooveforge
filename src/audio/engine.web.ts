@@ -30,6 +30,7 @@ async function engineNode(ctx: BaseAudioContext, wasmBytes: ArrayBuffer, onStart
   const setProgram = async (p: EngineProgram) => {
     await call({ type: "instruments", instruments: p.instruments });
     if (p.zones) await call({ type: "zones", zones: p.zones });
+    await call({ type: "mix", mix: p.mix ?? new Float32Array(0) });
   };
   const loadSample = async (slot: number, s: DecodedSample) =>
     (await call({ type: "sample", slot, l: s.l, r: s.r, sampleRate: s.sampleRate })).ok as boolean;

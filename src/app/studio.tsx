@@ -3,11 +3,16 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { createAudioEngine } from "@/audio/engine";
 import { kitProgram, type Mood } from "@/audio/kit";
 import { loadKit } from "@/audio/loadKit";
-import type { AudioEngine } from "@/audio/types";
+import { DEFAULT_KNOBS, mixFor, type Knobs } from "@/audio/mix";
+import type { AudioEngine, EngineProgram } from "@/audio/types";
 import { LoopBeam } from "@/components/LoopBeam";
 import { boomBapDemo, trapDemo } from "@/song/demoGrooves";
 
 const DEMOS: Record<Mood, () => ReturnType<typeof boomBapDemo>> = { boomBap: boomBapDemo, trap: trapDemo };
+const KNOB_STEPS = [0, 0.25, 0.5, 0.75, 1];
+
+/** Kit + mix for a mood, at the knob settings (the delay follows the demo's tempo). */
+const program = (m: Mood, knobs: Knobs): EngineProgram => ({ ...kitProgram(m), mix: mixFor(m, knobs, DEMOS[m]().bpm) });
 
 /** Phase 1 test bench for the studio sound (the real Studio UI is P3). Logs "[studio]" JSON like the spike. */
 export default function Studio() {
@@ -15,6 +20,7 @@ export default function Studio() {
   const [status, setStatus] = useState("starting engine…");
   const [mood, setMood] = useState<Mood>("boomBap");
   const [playing, setPlaying] = useState(false);
+  const [knobs, setKnobs] = useState<Knobs>(DEFAULT_KNOBS);
 
   const report = (step: string, data: object) => {
     console.log("[studio]", JSON.stringify({ step, platform: audio?.platform, ...data }));
@@ -27,17 +33,22 @@ export default function Studio() {
       const a = await createAudioEngine();
       created = a;
       const kit = await loadKit(a);
-      await a.setProgram(kitProgram("boomBap"));
+      await a.setProgram(program("boomBap", DEFAULT_KNOBS));
       await a.setSong(boomBapDemo());
       console.log("[studio]", JSON.stringify({ step: "kit loaded", platform: a.platform, ...kit }));
       // objective check that the sampler path sounds on this platform: one offline loop per mood
       for (const m of ["boomBap", "trap"] as const) {
-        await a.setProgram(kitProgram(m));
-        const [l] = await a.renderOffline(DEMOS[m](), 0);
-        const peak = l!.reduce((p, v) => Math.max(p, Math.abs(v)), 0);
-        console.log("[studio]", JSON.stringify({ step: "render check", platform: a.platform, mood: m, frames: l!.length, peak }));
+        await a.setProgram(program(m, DEFAULT_KNOBS));
+        const t0 = performance.now();
+        const [l, r] = await a.renderOffline(DEMOS[m](), 0);
+        const ms = Math.round(performance.now() - t0);
+        const peak = Math.max(...[l!, r!].map((c) => c.reduce((p, v) => Math.max(p, Math.abs(v)), 0)));
+        const rms = Math.sqrt(l!.reduce((e, v) => e + v * v, 0) / l!.length);
+        // realtime = seconds of audio per second of rendering (CPU headroom of the whole chain)
+        const realtime = Math.round((l!.length / a.sampleRate / (ms / 1000)) * 10) / 10;
+        console.log("[studio]", JSON.stringify({ step: "render check", platform: a.platform, mood: m, frames: l!.length, peak, rmsDb: Math.round(200 * Math.log10(rms)) / 10, ms, realtime }));
       }
-      await a.setProgram(kitProgram("boomBap"));
+      await a.setProgram(program("boomBap", DEFAULT_KNOBS));
       setStatus(`kit loaded: ${kit.files} samples in ${kit.ms} ms`);
       setAudio(a);
     })().catch((e) => setStatus(`init failed: ${e}`));
@@ -48,9 +59,17 @@ export default function Studio() {
   const pickMood = async (m: Mood) => {
     if (!audio) return;
     setMood(m);
-    await audio.setProgram(kitProgram(m));
+    await audio.setProgram(program(m, knobs));
     await audio.setSong(DEMOS[m]());
     report("mood", { mood: m });
+  };
+
+  const setKnob = async (k: keyof Knobs, v: number) => {
+    if (!audio) return;
+    const next = { ...knobs, [k]: v };
+    setKnobs(next);
+    await audio.setProgram(program(mood, next));
+    report("knob", next);
   };
 
   const toggle = async () => {
@@ -75,6 +94,21 @@ export default function Studio() {
         ))}
       </View>
 
+      {(["punch", "space"] as const).map((k) => (
+        <View key={k}>
+          <Text style={s.label}>{k === "punch" ? "Punch" : "Space"}</Text>
+          <View style={s.row}>
+            {KNOB_STEPS.map((v) => (
+              <Pressable key={v} accessibilityRole="button" accessibilityLabel={`${k} ${v * 100}%`}
+                accessibilityState={{ selected: knobs[k] === v }} onPress={() => setKnob(k, v)}
+                style={[s.step, knobs[k] === v && s.chipOn]} disabled={!audio}>
+                <Text style={s.text}>{v * 100}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ))}
+
       <Pressable accessibilityRole="button" accessibilityLabel={playing ? "Stop" : "Play"} onPress={toggle}
         disabled={!audio} style={[s.btn, !audio && s.off]}>
         <Text style={s.text}>{playing ? "Stop" : "Play"}</Text>
@@ -97,6 +131,7 @@ const s = StyleSheet.create({
   row: { flexDirection: "row", gap: 8 },
   chip: { minHeight: 44, minWidth: 96, justifyContent: "center", alignItems: "center", paddingHorizontal: 12, borderRadius: 22, borderWidth: 1, borderColor: "rgba(255,255,255,.08)" },
   chipOn: { borderColor: "#00E5FF" },
+  step: { minHeight: 44, minWidth: 52, justifyContent: "center", alignItems: "center", borderRadius: 22, borderWidth: 1, borderColor: "rgba(255,255,255,.08)" },
   btn: { minHeight: 56, justifyContent: "center", alignItems: "center", borderRadius: 12, backgroundColor: "rgba(255,255,255,.04)", borderWidth: 1, borderColor: "rgba(255,255,255,.08)" },
   off: { opacity: 0.4 },
   text: { color: "#fff", fontSize: 16 },

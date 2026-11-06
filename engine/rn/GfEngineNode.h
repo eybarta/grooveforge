@@ -90,6 +90,11 @@ class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
     engine_->setZones(reinterpret_cast<const float *>(buffer.data(runtime)), rows);
     return jsi::Value::undefined();
   }
+  JSI_HOST_FUNCTION_DECL(setMix) {
+    auto buffer = args[0].asObject(runtime).getArrayBuffer(runtime);
+    engine_->setMix(reinterpret_cast<const float *>(buffer.data(runtime)), static_cast<int>(buffer.size(runtime) / sizeof(float)));
+    return jsi::Value::undefined();
+  }
   // loadSample(slot, left: ArrayBuffer, right: ArrayBuffer | null, sampleRate) → boolean
   JSI_HOST_FUNCTION_DECL(loadSample) {
     auto left = args[1].asObject(runtime).getArrayBuffer(runtime);
@@ -129,6 +134,7 @@ class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
     addFunctions(JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, setEvents),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, setInstruments),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, setZones),
+                 JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, setMix),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, loadSample),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, play),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, stop),

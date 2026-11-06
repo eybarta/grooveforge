@@ -15,10 +15,12 @@ export interface DecodedSample {
   sampleRate: number;
 }
 
-/** Instrument table + sampler zones (flat rows, see engine/include/gf/Engine.h). Swapped lock-free while playing. */
+/** Instrument table, sampler zones and mix (flat rows, see engine/include/gf/Engine.h). Swapped lock-free while playing. */
 export interface EngineProgram {
   instruments: Float32Array;
   zones?: Float32Array;
+  /** Strips + buses (src/audio/mix.ts); omitted = the transparent mix. */
+  mix?: Float32Array;
 }
 
 /** The C++ engine on each platform: engine.web.ts (Web Audio + WASM worklet), engine.native.ts (audio-api + JSI). */

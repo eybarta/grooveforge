@@ -1,6 +1,10 @@
 #include "gf/Engine.h"
 
 #include <algorithm>
+#include <cstring>
+#include <type_traits>
+
+#include "Mixer.h"
 #include <cmath>
 #include <numbers>
 
@@ -17,6 +21,9 @@ Engine::Engine(float sampleRate, int captureSeconds)
       capOut_(static_cast<size_t>(sampleRate) * captureSeconds) {
   staged_.instruments.resize(1);  // instrument 0: a plain centred sine
   active_ = new Program(staged_);
+  mixer_ = std::make_unique<Mixer>(sr_);
+  mixer_->apply(active_->mix, strips());
+  mixer_->reset();
 }
 
 Engine::~Engine() {
@@ -72,6 +79,23 @@ void Engine::setZones(const float* flat, int rows) {
   publish();
 }
 
+void Engine::setMix(const float* flat, int length) {
+  staged_.mix = Mix{};
+  if (length >= kBusParams) {
+    // Buses is kBusParams floats in layout order
+    static_assert(std::is_trivially_copyable_v<Buses> && sizeof(Buses) == kBusParams * sizeof(float));
+    std::memcpy(&staged_.mix.buses, flat, sizeof(Buses));
+    const int rows = std::min((length - kBusParams) / kStripStride, kMaxInstruments);
+    staged_.mix.strips.resize(static_cast<size_t>(rows));
+    for (int i = 0; i < rows; ++i) {
+      const float* r = flat + kBusParams + i * kStripStride;
+      staged_.mix.strips[i] = {static_cast<int>(r[0]), r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8],
+                               r[9], r[10], r[11], r[12], r[13], r[14], r[15]};
+    }
+  }
+  publish();
+}
+
 bool Engine::loadSample(int slot, const float* l, const float* r, int frames, float sampleRate) {
   if (slot < 0 || slot >= kMaxSamples || frames <= 0 || samples_[slot].load() != nullptr) return false;
   auto* s = new SampleData{std::vector<float>(l, l + frames), std::vector<float>(r ? r : l, (r ? r : l) + frames),
@@ -104,6 +128,7 @@ void Engine::adoptPending() {
   if (!p) return;
   retired_.store(active_, std::memory_order_release);
   active_ = p;
+  mixer_->apply(active_->mix, strips());
   // keep playing from the same position in the (possibly resized) loop
   if (active_->loopFrames > 0) {
     const int64_t pos = frame_ % active_->loopFrames;
@@ -112,6 +137,8 @@ void Engine::adoptPending() {
                                 active_->events.begin());
   }
 }
+
+int Engine::strips() const { return std::clamp(static_cast<int>(active_->instruments.size()), 1, kMaxInstruments); }
 
 void Engine::trigger(const Event& e) {
   const auto& insts = active_->instruments;
@@ -248,9 +275,11 @@ void Engine::renderVoice(Voice& v, float& l, float& r) {
 }
 
 void Engine::process(const float* in, float* outL, float* outR, int frames) {
+  stfx::StopDenormals noDenormals;  // flush-to-zero for reverb/filter tails (ARM; a no-op in WASM)
   adoptPending();
   if (startRequested_.exchange(false, std::memory_order_acq_rel)) {
     for (auto& v : voices_) v.active = false;
+    mixer_->reset();
     frame_ = 0;
     next_ = 0;
     playing_ = true;
@@ -271,28 +300,38 @@ void Engine::process(const float* in, float* outL, float* outR, int frames) {
   int c = captured_.load(std::memory_order_relaxed);
   const int capMax = static_cast<int>(capIn_.size());
   const Program& prog = *active_;
+  const int nStrips = strips();
 
-  for (int i = 0; i < frames; ++i) {
-    const float mic = in ? in[i] : 0.f;  // read before outL[i] is written: hosts may process in place
-    if (playing_ && prog.loopFrames > 0) {
-      const int64_t pos = frame_ % prog.loopFrames;
-      if (pos == 0) next_ = 0;
-      while (next_ < prog.events.size() && prog.events[next_].frame == pos) trigger(prog.events[next_++]);
-      ++frame_;
+  for (int done = 0; done < frames; done += Mixer::kBlock) {
+    const int n = std::min(Mixer::kBlock, frames - done);
+    float mic[Mixer::kBlock];  // read before outL is written: hosts may process in place
+    for (int i = 0; i < n; ++i) mic[i] = in ? in[done + i] : 0.f;
+    for (int i = 0; i < n; ++i) {
+      if (playing_ && prog.loopFrames > 0) {
+        const int64_t pos = frame_ % prog.loopFrames;
+        if (pos == 0) next_ = 0;
+        while (next_ < prog.events.size() && prog.events[next_].frame == pos) trigger(prog.events[next_++]);
+        ++frame_;
+      }
+      for (auto& v : voices_) {
+        if (!v.active) continue;
+        const int s = v.instrument >= 0 && v.instrument < nStrips ? v.instrument : 0;
+        renderVoice(v, mixer_->left(s)[i], mixer_->right(s)[i]);
+      }
     }
-    float l = 0.f, r = 0.f;
-    for (auto& v : voices_)
-      if (v.active) renderVoice(v, l, r);
-    if (drive > 0.f) {  // the custom effect: Drive
-      l = std::tanh(k * l) * norm;
-      r = std::tanh(k * r) * norm;
-    }
-    outL[i] = l;
-    outR[i] = r;
-    if (cap && c < capMax) {
-      capIn_[c] = mic;
-      capOut_[c] = l;
-      ++c;
+    float* l = outL + done;
+    float* r = outR + done;
+    mixer_->process(nStrips, l, r, n);
+    for (int i = 0; i < n; ++i) {
+      if (drive > 0.f) {  // the spike's custom effect: Drive
+        l[i] = std::tanh(k * l[i]) * norm;
+        r[i] = std::tanh(k * r[i]) * norm;
+      }
+      if (cap && c < capMax) {
+        capIn_[c] = mic[i];
+        capOut_[c] = l[i];
+        ++c;
+      }
     }
   }
   captured_.store(c, std::memory_order_release);

@@ -1,5 +1,4 @@
 // Host-side checks for gf::Engine. Run: npm run test:engine
-#undef NDEBUG  // the checks below are asserts; keep them in every build type
 #include <atomic>
 #include <cassert>
 #include <cmath>
@@ -8,31 +7,9 @@
 #include <thread>
 #include <vector>
 
-#include "gf/Engine.h"
+#include "helpers.h"
 
 namespace {
-constexpr float kSr = 48000.f;
-constexpr int64_t kLoop = 256000;  // 2 bars at 90 BPM
-
-struct Stereo {
-  std::vector<float> l, r;
-};
-
-Stereo render(gf::Engine& e, int frames, const float* in = nullptr) {
-  Stereo o{std::vector<float>(frames), std::vector<float>(frames)};
-  for (int i = 0; i < frames; i += 128) {
-    const int n = std::min(128, frames - i);
-    e.process(in ? in + i : nullptr, o.l.data() + i, o.r.data() + i, n);
-  }
-  return o;
-}
-
-float peak(const std::vector<float>& v, size_t a, size_t b) {
-  float p = 0;
-  for (size_t i = a; i < b; ++i) p = std::max(p, std::fabs(v[i]));
-  return p;
-}
-
 const float kHatNote = 69.f + 12.f * std::log2(2400.f / 440.f);  // 2.4 kHz, as src/song/time.ts produces it
 
 // the spike loop (src/audio/spikeSongs.ts loopSong): a 55 Hz boop (note 33) on every beat + a hat on each off-beat 8th
@@ -163,9 +140,16 @@ int main() {
     std::atomic<bool> done{false};
     std::thread writer([&] {
       const float insts[] = {0, -1, 1.f, 0.f, 0, 0, 0, 0};
+      std::vector<float> mix(gf::kBusParams + gf::kStripStride, 0.f);  // glue + reverb + delay + a saturated strip
+      mix[1] = 3;
+      mix[13] = 0.5f;
+      mix[14] = 0.2f;
+      mix[17] = 0.5f;
+      for (int k : {11, 14, 15}) mix[gf::kBusParams + k] = 0.5f;
       for (int i = 0; !done.load(); ++i) {
         s.setEvents(ev.data(), rows - (i % 4), kLoop - (i % 3) * 1000);
         s.setInstruments(insts, 1);
+        s.setMix(mix.data(), i % 2 ? static_cast<int>(mix.size()) : 0);
       }
     });
     float l[128], r[128];
