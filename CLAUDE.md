@@ -12,8 +12,11 @@ v1 ships ONE flavor: **Hip-hop**, with a **Boom Bap ⇄ Trap** switch.
 - One **Expo** (React Native, New Architecture) codebase + Expo Router → iOS, Android and web (react-native-web).
 - **Android is deferred** (Eyal, 2026-11-06): build for iOS + web until the app works well on both, then bring up Android. Keep code cross-platform; `engine/android/` exists but is unbuilt.
 - **Shared C++ audio engine** (or Faust → C++): native via JSI, web as WASM inside an AudioWorklet. All synthesis, sampling, mixing and mastering run there, never in JS.
-- Audio I/O: **react-native-audio-api** (Web Audio-style API) — *pending the Phase 0 spike*. If the spike fails, stop and report options before switching.
-- Audio session, latency measurement, routing: a small **Expo native module** (Swift/Kotlin).
+- Audio I/O: **react-native-audio-api** (Web Audio-style API), **confirmed by the Phase 0 spike** (`docs/spike-report.md`), pinned to an exact version. The engine plugs in as a custom node through its `StableAPI.h` (see `engine/rn/`). Web uses Web Audio directly (AudioWorklet + WASM).
+- Audio session and routing: react-native-audio-api's `AudioManager` (no separate native module). **Latency is measured, never taken from the OS:**
+  - Why: OS/browser figures were 30–48 ms short on Bluetooth and web.
+  - How: the engine captures its output and the mic on one frame clock; clicks + cross-correlation give the round trip (RTL).
+  - When: per route; re-calibrate on route change; re-verify around takes on Bluetooth and web (latency drifts and can step by a buffer).
 - Visuals: **React Native Skia** for everything that glows (orb shader, sparks, grid, beam); **Reanimated** for springs, morphs and transitions.
 - ML: **onnxruntime** (react-native + web). Core ML acceleration is a later optimisation.
 - State: **zustand**. One `Song` store is the single source of truth.
@@ -24,7 +27,7 @@ v1 ships ONE flavor: **Hip-hop**, with a **Boom Bap ⇄ Trap** switch.
 - `Song → Track → NoteEvent {tick, lane, velocity, offsetMs, source}` — hits keep their original timing offset (the user's feel); quantize is a blend knob, not destructive.
 - Live playback and offline export render from the same Song through the same engine, so they sound identical.
 - Heavy analysis (HPSS, onsets, classification, tempo, pitch) runs off the UI thread (worker / native thread).
-- **Never push playback position through React state.** The engine exposes its clock minus output latency as a Reanimated shared value; visuals read it every frame.
+- **Never push playback position through React state.** The engine exposes its clock minus the *measured* output latency (calibrated RTL minus the small reported input latency; never the OS `outputLatency` alone) as a Reanimated shared value; visuals read it every frame.
 - Visualizers are pure functions of `(song, t)`: live playback reads t from the audio clock; video export steps t frame by frame. Same code, always in sync.
 - Recorded takes are shifted by the measured round-trip latency before analysis.
 - Mic capture: echo cancellation, noise suppression and auto gain OFF.

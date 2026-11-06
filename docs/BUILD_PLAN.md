@@ -16,7 +16,7 @@ Project rules and decisions: `CLAUDE.md`.
 Keep as reference only: the scheduler idea, `EditMap` (user overrides on top of detected hits), WAV writer, flavor concept.
 
 ## The pipeline
-1. **Capture** — 48 kHz, processing off, count-in, input meter, latency-compensated.
+1. **Capture** — 48 kHz, processing off, count-in, input meter + clip warning, normalise to −3 dBFS before analysis, latency-compensated with the *measured* round trip (see `docs/spike-report.md`).
 2. **Calibration "Teach me your kit"** (15–20 s, once, skippable) — 5× each: kick, snare, closed hat, open hat, rim/click, hum. Per-user embeddings + KNN (research: ~0.87–0.90 accuracy vs ~0.83 for hand features).
 3. **Split** — HPSS: percussive → onsets/classifier; harmonic → pitch tracker.
 4. **Onsets** — log-mel SuperFlux-style, adaptive threshold, refine to ±2 ms; keep `offsetMs`.
@@ -43,25 +43,32 @@ Keep as reference only: the scheduler idea, `EditMap` (user overrides on top of 
 Record (audio-reactive orb, count-in rings, live sparks per hit) → **Forge transition** (button becomes progress bar, waveform bars shrink to lane-shaped dots, dots fly into the grid, stats rise, beam sweeps — exact timeline in `docs/motion/forge-film/film.html`) → Studio (grid, beam playhead on the audio clock, knobs: Quantize, Swing, Humanize, Punch, Space, Loudness; Boom Bap ⇄ Trap; "Your mouth ⇄ Studio" A/B; layer stack with "+ Sing a layer") → Export sheet.
 
 ## Phases and gates (≈ 12 weeks, one developer; estimates, not commitments)
-### P0 · Foundation + audio spike (weeks 1–2)
-- [ ] Branch `v2`; new Expo app (New Architecture, Expo Router, TypeScript strict); delete Grok scaffolding; keep POC audio files in `reference/` only.
-- [ ] **Audio spike on a real iPhone (+ Android, deferred 2026-11-06)**: react-native-audio-api — record while a loop plays, offline render to WAV, custom DSP node from C++, measured round-trip latency. Same on web with AudioWorklet + WASM.
-- [ ] C++ engine skeleton building for iOS (JSI) and web (WASM); one sine voice through it on both. Android JSI build written, not built (deferred).
-- [ ] `Song` types + zustand store; golden takes (10 WAV + labelled JSON) and a scoring harness.
+### P0 · Foundation + audio spike (weeks 1–2) ✅ passed 2026-11-06 (iOS + web), see `docs/spike-report.md`
+- [x] Branch `v2`; new Expo app (New Architecture, Expo Router, TypeScript strict); delete Grok scaffolding; keep POC audio files in `reference/` only.
+- [x] **Audio spike on a real iPhone (+ Android, deferred 2026-11-06)**: react-native-audio-api — record while a loop plays, offline render to WAV, custom DSP node from C++, measured round-trip latency. Same on web with AudioWorklet + WASM.
+- [x] C++ engine skeleton building for iOS (JSI) and web (WASM); one sine voice through it on both. Android JSI build written, not built (deferred).
+- [x] `Song` types + zustand store; scoring harness + 2 synthetic golden takes. **10 real takes pending (Eyal; record with the spike's "Save last take").**
 - **Gate:** spike report with latency numbers per device; engine plays on iOS + web; CI green. (Android deferred until iOS + web are solid.)
 
 ### P1 · Studio sound (weeks 3–4)
+- [ ] **First: audio clock → UI thread.** The engine's frame counter must be readable from Reanimated UI worklets (shared value) on iOS and web; demo a beam locked to the loop at 60 fps. This is the biggest unknown left after P0.
+- [ ] Engine: lock-free event swap so the Song can change while it plays (live editing; P0's `setEvents` refuses while playing).
 - [ ] Sampler (velocity layers, round-robin), kit `manifest.json`, placeholder hip-hop kit (licence-checked).
 - [ ] 808 voice (tuned sample, glide, saturation); mix chain; master (limiter + LUFS); WAV/MP3 export.
 - **Gate:** ≥ 80 % prefer v2 in a blind A/B vs POC (20 listeners); export within ± 0.5 LU.
 
 ### P2 · Accurate ears (weeks 4–6)
-- [ ] HPSS split; onsets; calibration flow; MFCC+KNN then ONNX embedding; confidence.
+- [ ] **Latency calibration as a product feature:**
+  - per-route measurement with the reliability check;
+  - auto re-calibrate on route change;
+  - re-verify at take start on Bluetooth (drifts ~3 ms) and web (can step by a buffer; watch `MediaStreamTrack` audio stats);
+  - UX lands in P3.
+- [ ] HPSS split; onsets; "teach me your kit" calibration flow; MFCC+KNN then ONNX embedding; confidence.
 - [ ] Tempo/downbeat/swing; hum → 808 notes.
 - **Gate:** onset F1 ≥ 0.92, class accuracy ≥ 0.90, record→playback ≤ 2.5 s.
 
 ### P3 · Neon UI (weeks 5–8, parallel to P2)
-- [ ] Tokens, glass surfaces, lane colours+shapes; Record screen (Skia orb shader, sparks); Forge transition matching the motion spec; Studio grid/beam/knobs/A-B; reduced motion.
+- [ ] Visual sync from the measured output latency (not OS `outputLatency`). Tokens, glass surfaces, lane colours+shapes; Record screen (Skia orb shader, sparks); Forge transition matching the motion spec; Studio grid/beam/knobs/A-B; reduced motion.
 - **Gate:** 60 fps on a mid-range phone; transition matches the spec video side by side.
 
 ### P4 · Melody layers (weeks 8–10)
