@@ -50,11 +50,11 @@ Record (audio-reactive orb, count-in rings, live sparks per hit) → **Forge tra
 - [x] `Song` types + zustand store; scoring harness + 2 synthetic golden takes. **10 real takes pending (Eyal; record with the spike's "Save last take").**
 - **Gate:** spike report with latency numbers per device; engine plays on iOS + web; CI green. (Android deferred until iOS + web are solid.)
 
-### P1 · Studio sound (weeks 3–4)
-- [ ] **First: audio clock → UI thread.** The engine's frame counter must be readable from Reanimated UI worklets (shared value) on iOS and web; demo a beam locked to the loop at 60 fps. This is the biggest unknown left after P0.
-- [ ] Engine: lock-free event swap so the Song can change while it plays (live editing; P0's `setEvents` refuses while playing).
-- [ ] Sampler (velocity layers, round-robin), kit `manifest.json`, placeholder hip-hop kit (licence-checked).
-- [ ] 808 voice (synthesised by the engine: tuned, glide, saturation); mix chain; master (limiter + LUFS); WAV export (AAC/M4A in P5).
+### P1 · Studio sound (weeks 3–4) · built; gate waiting on the A/B listeners, see `docs/p1-report.md`
+- [x] **First: audio clock → UI thread.** The engine's frame counter must be readable from Reanimated UI worklets (shared value) on iOS and web; demo a beam locked to the loop at 60 fps. This is the biggest unknown left after P0.
+- [x] Engine: lock-free event swap so the Song can change while it plays (live editing; P0's `setEvents` refuses while playing).
+- [x] Sampler (velocity layers, round-robin), kit `manifest.json`, placeholder hip-hop kit (licence-checked).
+- [x] 808 voice (synthesised by the engine: tuned, glide, saturation); mix chain; master (limiter + LUFS); WAV export (AAC/M4A in P5).
 - **Gate:** ≥ 80 % prefer v2 in a blind A/B vs POC (20 listeners); export within ± 0.5 LU.
 
 ### P2 · Accurate ears (weeks 4–6)
