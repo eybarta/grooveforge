@@ -26,13 +26,13 @@ export const LANES: readonly Lane[] = ["kick", "snare", "hatClosed", "hatOpen", 
 
 /** Fields per event / per instrument in the flat buffers handed to the C++ engine (engine/include/gf/Engine.h). */
 export const ENGINE_EVENT_STRIDE = 6;
-export const ENGINE_INSTRUMENT_STRIDE = 4;
+export const ENGINE_INSTRUMENT_STRIDE = 8;
 
-/** [kind, chokeGroup, gain, pan] per lane slot. Closed and open hat share choke group 1 (closed cuts open). */
+/** [kind, chokeGroup, gain, pan, p1..p4] per lane slot: all sine. Closed and open hat share choke group 1. */
 export function defaultInstruments(): Float32Array {
   const SINE = 0;
   return Float32Array.from(
-    LANES.flatMap((lane) => [SINE, lane === "hatClosed" || lane === "hatOpen" ? 1 : -1, 1, 0]),
+    LANES.flatMap((lane) => [SINE, lane === "hatClosed" || lane === "hatOpen" ? 1 : -1, 1, 0, 0, 0, 0, 0]),
   );
 }
 
@@ -53,7 +53,7 @@ export function songToEngineEvents(song: Song, sampleRate: number): { events: Fl
         ? DEFAULT_DUR_SEC[n.lane] * sampleRate
         : n.durationTicks * secPerTick(song.bpm) * sampleRate;
       const wrapped = ((frame % loopFrames) + loopFrames) % loopFrames;
-      rows.push([wrapped, LANES.indexOf(n.lane), n.velocity * gain, note, Math.round(dur), -1]);
+      rows.push([wrapped, LANES.indexOf(n.lane), n.velocity * gain, note, Math.round(dur), n.glideFrom ?? -1]);
     }
   }
   rows.sort((a, b) => a[0]! - b[0]!);

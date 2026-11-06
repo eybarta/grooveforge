@@ -130,7 +130,7 @@ int main() {
 
   // choke group: a closed hat cuts a ringing open hat within ~5 ms; pan sends instrument 1 hard left
   {
-    const float insts[] = {0, 1, 1.f, 0.f, 0, 1, 1.f, -1.f};  // [kind, chokeGroup, gain, pan] × 2
+    const float insts[] = {0, 1, 1.f, 0.f, 0, 0, 0, 0, 0, 1, 1.f, -1.f, 0, 0, 0, 0};  // [kind, chokeGroup, gain, pan, p×4] × 2
     const float hats[] = {0, 0, 0.8f, 90, 48000, -1, 4800, 1, 0.8f, 95, 480, -1};  // open at 0, closed at 100 ms
     gf::Engine h(kSr);
     h.setInstruments(insts, 2);
@@ -162,7 +162,7 @@ int main() {
     s.play();
     std::atomic<bool> done{false};
     std::thread writer([&] {
-      const float insts[] = {0, -1, 1.f, 0.f};
+      const float insts[] = {0, -1, 1.f, 0.f, 0, 0, 0, 0};
       for (int i = 0; !done.load(); ++i) {
         s.setEvents(ev.data(), rows - (i % 4), kLoop - (i % 3) * 1000);
         s.setInstruments(insts, 1);
@@ -178,7 +178,7 @@ int main() {
   {
     constexpr int kSmp = 4800;
     std::vector<float> soft(kSmp, 0.25f), hard(kSmp, 1.f), hard2(kSmp, 0.75f);  // constant "samples" = easy to identify
-    const float insts[] = {1, -1, 1.f, 0.f};                      // instrument 0 = sampler, centred, gain 1
+    const float insts[] = {1, -1, 1.f, 0.f, 0, 0, 0, 0};          // instrument 0 = sampler, centred, gain 1
     const float zones[] = {0, 0.5f, 0, 0, 1.f, 1, 0, 1.f, 2};     // layer ≤0.5: slot 0; layer ≤1: slots 1, 2 (round-robin)
     auto make = [&](const std::vector<float>& ev) {
       auto s = std::make_unique<gf::Engine>(kSr);
@@ -213,6 +213,35 @@ int main() {
     empty.setEvents(ev.data(), 3, kLoop);
     empty.play();
     assert(peak(render(empty, 30000).l, 0, 30000) == 0.f);
+  }
+
+  // 808: tuned to the note, punch = pitch drop at the attack, glide slides in from glideNote, release after the length
+  {
+    auto zeroCrossHz = [](const std::vector<float>& x, size_t a, size_t b) {
+      int z = 0;
+      for (size_t i = a + 1; i < b; ++i) z += (x[i - 1] < 0) != (x[i] < 0);
+      return z / 2.0 / ((b - a) / 48000.0);
+    };
+    const float bass[] = {2, 2, 1.f, 0.f, 12, 30, 2.f, 200};  // 808: punch 12 st over 30 ms, decay 2 s, glide 200 ms
+    gf::Engine b(kSr);
+    b.setInstruments(bass, 1);
+    const float plain[] = {0, 0, 1.f, 33, 24000, -1};  // A1 = 55 Hz, 0.5 s
+    b.setEvents(plain, 1, kLoop);
+    b.play();
+    const auto o = render(b, 30000);
+    assert(zeroCrossHz(o.l, 200, 600) > 80.0);                           // punch: well above 55 Hz at the attack
+    assert(std::fabs(zeroCrossHz(o.l, 9600, 19200) - 55.0) < 1.5);       // settles on the note
+    assert(peak(o.l, 24000 + 960 + 10, 30000) == 0.f);                   // 20 ms release, then silence
+    assert(peak(o.l, 9600, 12000) > 0.5f);                               // decay 2 s: still loud after 0.2 s
+
+    gf::Engine g(kSr);
+    g.setInstruments(bass, 1);
+    const float slide[] = {0, 0, 1.f, 45, 48000, 33};  // slides from A1 (55 Hz) up to A2 (110 Hz) over 200 ms
+    g.setEvents(slide, 1, kLoop);
+    g.play();
+    const auto gl = render(g, 48000);
+    assert(zeroCrossHz(gl.l, 3600, 4800) < 95.0);                        // still on the way up at ~80 ms
+    assert(std::fabs(zeroCrossHz(gl.l, 19200, 38400) - 110.0) < 2.0);    // arrived
   }
 
   // reference fingerprint for the device offline-render comparison (mean |x| and peak of one dry loop, left)

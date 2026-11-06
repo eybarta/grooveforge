@@ -10,8 +10,8 @@ namespace gf {
 
 /** Flat event row from songToEngineEvents() (src/song/time.ts): [frame, instrument, velocity, note, durationFrames, glideNote]. */
 constexpr int kEventStride = 6;
-/** Flat instrument row: [kind, chokeGroup, gain, pan]. */
-constexpr int kInstrumentStride = 4;
+/** Flat instrument row: [kind, chokeGroup, gain, pan, p1, p2, p3, p4] (p* = voice parameters, see Instrument). */
+constexpr int kInstrumentStride = 8;
 /** Flat zone row: [instrument, maxVelocity, sampleSlot]. Rows of one instrument and maxVelocity form a layer. */
 constexpr int kZoneStride = 3;
 constexpr int kMaxVoices = 32;
@@ -19,7 +19,7 @@ constexpr int kMaxSamples = 256;
 constexpr int kMaxInstruments = 64;
 constexpr int kMaxLayers = 8;  // round-robin counters per instrument
 
-enum class VoiceKind : uint8_t { Sine = 0, Sampler = 1 };
+enum class VoiceKind : uint8_t { Sine = 0, Sampler = 1, Bass808 = 2 };
 
 /** Decoded audio for the sampler. Immutable once loaded. */
 struct SampleData {
@@ -38,6 +38,9 @@ struct Instrument {
   int chokeGroup = -1;  // a new note cuts every sounding voice in the same group (closed hat chokes open hat)
   float gain = 1.f;
   float pan = 0.f;      // −1 left … +1 right; 0 = unity on both channels
+  // Bass808: p1 punch depth (semitones of pitch drop at the attack), p2 punch time (ms),
+  //          p3 decay (seconds, amplitude time constant), p4 glide time (ms, used when an event has a glideNote)
+  float p[4] = {0, 0, 0, 0};
 };
 
 struct Event {
@@ -46,7 +49,7 @@ struct Event {
   float velocity;
   float note;     // MIDI note (fractional allowed)
   int64_t durationFrames;
-  float glideNote;  // < 0: no glide
+  float glideNote;  // Bass808: the pitch this note slides in from (< 0: no glide)
 };
 
 /** Everything the audio thread plays from. Immutable once published, so it can be swapped without locks. */
@@ -110,6 +113,9 @@ class Engine {
     // sampler
     const SampleData* sample = nullptr;
     double pos = 0, rate = 1;
+    // 808: freq(t) = glide(t) · 2^(punchSemis · punchEnv / 12); glide moves log-linearly from fromHz to toHz
+    double fromHz = 0, toHz = 0, glidePos = 1, glideStep = 0;
+    float punchSemis = 0, punchEnv = 0, punchDecay = 1, ampDecay = 1, release = 0, releaseStep = 0;
   };
 
   void publish();                // control thread: copy staged_ and hand it to the audio thread

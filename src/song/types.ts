@@ -17,6 +17,8 @@ export interface NoteEvent {
   /** MIDI note, for bass / melody lanes. */
   pitch?: number;
   durationTicks?: number;
+  /** 808 slide: the MIDI pitch this note glides in from (a hummed slide becomes this in Phase 2). */
+  glideFrom?: number;
 }
 
 export interface Track {

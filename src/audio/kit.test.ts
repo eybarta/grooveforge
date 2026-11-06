@@ -16,7 +16,7 @@ describe("kitProgram", () => {
       expect(mine.length).toBeGreaterThan(0);
       for (const z of mine) expect(z[2]).toBeLessThan(KIT_FILES.length);
     }
-    expect(kind("bass")).toBe(0); // sine until the 808 lands
+    expect(kind("bass")).toBe(2); // synthesised 808
   });
 
   it("puts closed and open hats in the same choke group", () => {

@@ -51,7 +51,8 @@ void Engine::setInstruments(const float* flat, int count) {
   staged_.instruments.assign(static_cast<size_t>(std::max(1, count)), Instrument{});
   for (int i = 0; i < count; ++i) {
     const float* r = flat + i * kInstrumentStride;
-    staged_.instruments[i] = {static_cast<VoiceKind>(static_cast<int>(r[0])), static_cast<int>(r[1]), r[2], r[3]};
+    staged_.instruments[i] = {static_cast<VoiceKind>(static_cast<int>(r[0])), static_cast<int>(r[1]), r[2], r[3],
+                              {r[4], r[5], r[6], r[7]}};
   }
   publish();
 }
@@ -156,6 +157,22 @@ void Engine::trigger(const Event& e) {
     v->left = static_cast<int64_t>(static_cast<double>(sample->l.size()) / v->rate);  // for voice stealing
     return;
   }
+  if (inst.kind == VoiceKind::Bass808) {
+    const float punchMs = std::max(1.f, inst.p[1]), decaySec = std::max(0.01f, inst.p[2]), glideMs = inst.p[3];
+    v->toHz = noteToHz(e.note);
+    v->fromHz = e.glideNote >= 0 && glideMs > 0 ? noteToHz(e.glideNote) : v->toHz;
+    v->glidePos = v->fromHz == v->toHz ? 1 : 0;
+    v->glideStep = glideMs > 0 ? 1000.0 / (glideMs * sr_) : 1;
+    v->punchSemis = inst.p[0];
+    v->punchEnv = 1.f;
+    v->punchDecay = std::exp(-1000.f / (punchMs * sr_));
+    v->amp = 1.f;
+    v->ampDecay = std::exp(-1.f / (decaySec * sr_));
+    v->left = std::max<int64_t>(1, e.durationFrames);
+    v->release = 1.f;
+    v->releaseStep = 1.f / (0.02f * sr_);  // 20 ms release after the note length: no click on note-off
+    return;
+  }
   v->phaseInc = 2 * std::numbers::pi * noteToHz(e.note) / sr_;
   v->amp = 1.f;
   v->left = e.durationFrames;
@@ -192,6 +209,27 @@ void Engine::renderVoice(Voice& v, float& l, float& r) {
     r += fade * v.gainR * hermite(tap(s.r, i - 1), tap(s.r, i), tap(s.r, i + 1), tap(s.r, i + 2), t);
     v.pos += v.rate;
     --v.left;
+    return;
+  }
+  if (v.kind == VoiceKind::Bass808) {
+    if (v.left > 0) {
+      --v.left;
+    } else if ((v.release -= v.releaseStep) <= 0) {
+      v.active = false;
+      return;
+    }
+    const double glided = v.glidePos >= 1 ? v.toHz : v.fromHz * std::pow(v.toHz / v.fromHz, v.glidePos);
+    v.glidePos = std::min(1.0, v.glidePos + v.glideStep);
+    const double hz = glided * std::exp2(v.punchSemis * v.punchEnv / 12.0);
+    v.punchEnv *= v.punchDecay;
+    const float env = v.amp * std::min(1.f, v.attack) * fade * std::max(0.f, v.release);
+    v.attack += 1.f / (0.001f * sr_);  // 1 ms attack: keeps the click of a real 808 without a pop
+    v.amp *= v.ampDecay;
+    const float s = env * static_cast<float>(std::sin(v.phase));
+    v.phase += 2 * std::numbers::pi * hz / sr_;
+    if (v.phase > 2 * std::numbers::pi) v.phase -= 2 * std::numbers::pi;
+    l += s * v.gainL;
+    r += s * v.gainR;
     return;
   }
   if (v.left <= 0) {

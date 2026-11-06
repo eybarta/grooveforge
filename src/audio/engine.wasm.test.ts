@@ -18,7 +18,7 @@ describe.skipIf(!existsSync(WASM) && !process.env.CI)("WASM engine", () => {
     const inst = defaultInstruments();
     const ip = ex.gf_alloc(inst.length);
     new Float32Array(ex.memory.buffer, ip, inst.length).set(inst);
-    ex.gf_set_instruments(e, ip, inst.length / 4);
+    ex.gf_set_instruments(e, ip, inst.length / 8);
     const p = ex.gf_alloc(events.length);
     new Float32Array(ex.memory.buffer, p, events.length).set(events);
     ex.gf_set_events(e, p, events.length / 6, loopFrames);

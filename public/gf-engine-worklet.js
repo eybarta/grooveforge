@@ -38,7 +38,7 @@ class GfEngineProcessor extends AudioWorkletProcessor {
         const n = msg.instruments.length;
         const p = ex.gf_alloc(Math.max(1, n));
         this.heap(p, n).set(msg.instruments);
-        ex.gf_set_instruments(e, p, n / 4); // rows of 4 (kInstrumentStride)
+        ex.gf_set_instruments(e, p, n / 8); // rows of 8 (kInstrumentStride)
         ex.gf_free(p);
         break;
       }

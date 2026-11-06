@@ -12,9 +12,21 @@ const notes = (hits: Hit[]): NoteEvent[] =>
     id: `d${i}`, tick: isTick ? at : at * S16, lane, velocity, offsetMs: 0, source: "user",
   }));
 
-const drums = (song: Song, hits: Hit[]): Song => ({
+/** 808 notes as [16th step, MIDI pitch, length in 16ths, glideFrom?]. */
+type Bass = [number, number, number, number?];
+
+const bassNotes = (line: Bass[]): NoteEvent[] =>
+  line.map(([step, pitch, len, glideFrom], i) => ({
+    id: `b${i}`, tick: step * S16, lane: "bass", velocity: 1, offsetMs: 0, source: "user",
+    pitch, durationTicks: len * S16, ...(glideFrom === undefined ? {} : { glideFrom }),
+  }));
+
+const groove = (song: Song, hits: Hit[], bass: Bass[]): Song => ({
   ...song,
-  tracks: [{ id: "drums", kind: "drums", name: "Drums", gainDb: 0, muted: false, frozen: false, notes: notes(hits) }],
+  tracks: [
+    { id: "drums", kind: "drums", name: "Drums", gainDb: 0, muted: false, frozen: false, notes: notes(hits) },
+    { id: "bass", kind: "bass", name: "808", gainDb: 0, muted: false, frozen: false, notes: bassNotes(bass) },
+  ],
 });
 
 /** Boom Bap, 90 BPM, swung 16ths: dusty kick/snare, accented 8th hats, a ghost snare, shaker 16ths, one open hat. */
@@ -28,7 +40,9 @@ export function boomBapDemo(): Song {
     for (let s = 1; s < 16; s += 2) hits.push([o + s, "perc", 0.35]);
   }
   hits.push([30, "hatOpen", 0.7]);
-  return drums({ ...emptySong(), id: "boom-bap-demo", bpm: 90, bars: 2, mood: "boomBap", swing: 0.58, quantize: 1 }, hits);
+  // F minor, following the kick: F1 F1 Ab1 | Eb1 Eb1 C1
+  const bass: Bass[] = [[0, 29, 6], [7, 29, 3], [10, 32, 5], [16, 27, 6], [23, 27, 3], [26, 24, 5]];
+  return groove({ ...emptySong(), id: "boom-bap-demo", bpm: 90, bars: 2, mood: "boomBap", swing: 0.58, quantize: 1 }, hits, bass);
 }
 
 /** Trap, 140 BPM half-time: syncopated kick, clap on 3, 8th hats with a 1/32 roll, snaps, an open hat. */
@@ -43,5 +57,7 @@ export function trapDemo(): Song {
   hits.push([16 + 14, "kick", 0.7]);
   for (let k = 0; k < 8; k++) hits.push([(16 + 12) * S16 + k * S32, "hatClosed", 0.45 + 0.05 * k, true]); // the roll
   hits.push([6, "perc", 0.6], [22, "perc", 0.6], [14, "hatOpen", 0.6]);
-  return drums({ ...emptySong(), id: "trap-demo", bpm: 140, bars: 2, mood: "trap", swing: 0.5, quantize: 1 }, hits);
+  // C# minor, long 808s that slide: C#1 … E1 (slides up) … F#1 (slides up) … back down to C#1
+  const bass: Bass[] = [[0, 25, 3], [3, 25, 7], [10, 25, 6], [16, 28, 3, 25], [19, 28, 7], [26, 30, 4, 28], [30, 25, 2, 30]];
+  return groove({ ...emptySong(), id: "trap-demo", bpm: 140, bars: 2, mood: "trap", swing: 0.5, quantize: 1 }, hits, bass);
 }
