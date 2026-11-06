@@ -42,12 +42,19 @@ describe("mixFor", () => {
     expect(bus(mixFor("trap", DEFAULT_KNOBS, 140), "delaySec")).toBeCloseTo((0.75 * 60) / 140);
   });
 
-  it("Punch scales drum attack and the smash; Space scales the sends; 0.5 = the preset", () => {
+  it("0.5 = the preset; Punch moves drum attack up, sustain down, glue attack slower; Space 0 = dry", () => {
     const mid = mixFor("boomBap", DEFAULT_KNOBS, 90);
-    const loud = mixFor("boomBap", { punch: 1, space: 0 }, 90);
-    expect(at(loud, "kick", "attackDb")).toBeCloseTo(2 * at(mid, "kick", "attackDb"));
-    expect(bus(loud, "smashMix")).toBeCloseTo(2 * bus(mid, "smashMix"));
-    expect(at(loud, "snare", "reverbSend")).toBe(0);
-    expect(at(loud, "bass", "satDrive")).toBe(at(mid, "bass", "satDrive")); // the 808 isn't a Punch target
+    const hard = mixFor("boomBap", { punch: 1, space: 0 }, 90);
+    const soft = mixFor("boomBap", { punch: 0, space: 1 }, 90);
+    expect(at(mid, "kick", "attackDb")).toBe(3); // the preset as voiced
+    expect(at(hard, "kick", "attackDb")).toBe(12);
+    expect(at(soft, "kick", "attackDb")).toBe(-6);
+    expect(at(hard, "kick", "sustainDb")).toBeLessThan(at(soft, "kick", "sustainDb"));
+    expect(bus(hard, "glueAttackMs")).toBeGreaterThan(bus(soft, "glueAttackMs"));
+    expect(bus(hard, "smashMix")).toBeLessThan(bus(soft, "smashMix"));
+    expect(at(hard, "bass", "satDrive")).toBe(at(mid, "bass", "satDrive")); // the 808 isn't a Punch target
+    expect(at(hard, "snare", "reverbSend")).toBe(0);
+    expect(at(hard, "snare", "delaySend")).toBe(0);
+    expect(at(soft, "snare", "reverbSend")).toBeCloseTo(4 * at(mid, "snare", "reverbSend"));
   });
 });

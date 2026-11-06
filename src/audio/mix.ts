@@ -48,7 +48,7 @@ const PRESETS: Record<Mood, Preset> = {
   boomBap: {
     strips: {
       kick: { bus: DRUM_BUS, hpfHz: 30, lowHz: 70, lowDb: 2.5, midHz: 380, midDb: -3, highHz: 4500, highDb: 1, attackDb: 3, sustainDb: -1 },
-      snare: { bus: DRUM_BUS, hpfHz: 90, lowHz: 220, lowDb: 1.5, midHz: 900, midDb: -2, highHz: 6000, highDb: 1.5, attackDb: 2, reverbSend: 0.14 },
+      snare: { bus: DRUM_BUS, hpfHz: 90, lowHz: 220, lowDb: 1.5, midHz: 900, midDb: -2, highHz: 6000, highDb: 1.5, attackDb: 2, reverbSend: 0.14, delaySend: 0.1 },
       hatClosed: { bus: DRUM_BUS, hpfHz: 350, highHz: 9000, highDb: -1.5, reverbSend: 0.04 },
       hatOpen: { bus: DRUM_BUS, hpfHz: 350, highHz: 9000, highDb: -1.5, reverbSend: 0.06 },
       perc: { bus: DRUM_BUS, hpfHz: 400, reverbSend: 0.08 },
@@ -66,7 +66,7 @@ const PRESETS: Record<Mood, Preset> = {
   trap: {
     strips: {
       kick: { bus: DRUM_BUS, hpfHz: 30, lowHz: 60, lowDb: 1.5, midHz: 320, midDb: -3, highHz: 6000, highDb: 2, attackDb: 2, sustainDb: -2 },
-      snare: { bus: DRUM_BUS, hpfHz: 150, midHz: 1000, midDb: -1, highHz: 7000, highDb: 2.5, attackDb: 1, reverbSend: 0.15 },
+      snare: { bus: DRUM_BUS, hpfHz: 150, midHz: 1000, midDb: -1, highHz: 7000, highDb: 2.5, attackDb: 1, reverbSend: 0.15, delaySend: 0.08 },
       hatClosed: { bus: DRUM_BUS, hpfHz: 500, highHz: 10000, highDb: 2, reverbSend: 0.02 },
       hatOpen: { bus: DRUM_BUS, hpfHz: 450, highHz: 10000, highDb: 1.5, reverbSend: 0.05 },
       perc: { bus: DRUM_BUS, hpfHz: 300, highHz: 8000, highDb: 2, reverbSend: 0.15, delaySend: 0.1 },
@@ -84,11 +84,14 @@ const PRESETS: Record<Mood, Preset> = {
 
 /** The studio's macro knobs, 0–1 (0.5 = the preset as voiced). */
 export interface Knobs {
-  /** Drum transients + parallel smash. */
+  /** Drum hits soft and roomy (0) → hard and tight (1): transient attack/sustain, glue attack time, parallel smash. */
   punch: number;
-  /** Reverb + delay sends. */
+  /** Dry (0) → big (1): reverb + delay sends and the reverb's length. */
   space: number;
 }
+
+/** Punch swings the drums' transient shaper this far either side of the preset (dB), and the glue attack ×/÷ 4. */
+const PUNCH_ATTACK_DB = 9, PUNCH_SUSTAIN_DB = 5, PUNCH_GLUE = 4;
 export const DEFAULT_KNOBS: Knobs = { punch: 0.5, space: 0.5 };
 
 /** True-peak ceiling of every mood's master (CLAUDE.md export bar: ≤ −1 dBTP). */
@@ -100,15 +103,23 @@ const CEILING_DB = -1;
  */
 export function mixFor(mood: Mood, knobs: Knobs, bpm: number, gainDb = 0): Float32Array {
   const { strips, buses } = PRESETS[mood];
-  const punch = 2 * knobs.punch, space = 2 * knobs.space;
+  const punch = 2 * knobs.punch - 1; // −1 … +1, 0 = preset
+  const sends = (2 * knobs.space) ** 2; // 0 … 4, 1 = preset
   const { delayBeats, ...rest } = buses;
   const b: Buses = { ...DEFAULT_BUSES, ...rest, delaySec: (delayBeats * 60) / bpm, masterGainDb: gainDb, limitDb: CEILING_DB };
-  b.smashMix = Math.min(1, b.smashMix * punch);
+  // a slow glue attack lets hits through before it clamps; a fast one flattens them
+  b.glueAttackMs = Math.min(50, Math.max(1, b.glueAttackMs * PUNCH_GLUE ** punch));
+  // parallel smash adds density but flattens hits (measured): hard Punch backs it off, soft Punch leans on it
+  b.smashMix = Math.min(1, b.smashMix * (1 - 0.8 * punch));
+  b.reverbRt20 *= 0.5 + 1.2 * knobs.space;
   const rows = LANES.map((lane) => {
     const s: Strip = { ...DEFAULT_STRIP, ...strips[lane] };
-    if (s.bus === DRUM_BUS) s.attackDb *= punch;
-    s.reverbSend *= space;
-    s.delaySend *= space;
+    if (s.bus === DRUM_BUS) {
+      s.attackDb += PUNCH_ATTACK_DB * punch;
+      s.sustainDb -= PUNCH_SUSTAIN_DB * punch;
+    }
+    s.reverbSend *= sends;
+    s.delaySend *= sends;
     return STRIP_FIELDS.map((f) => s[f]);
   });
   return Float32Array.from([...BUS_FIELDS.map((f) => b[f]), ...rows.flat()]);

@@ -10,6 +10,8 @@ constexpr float kDbToLn = 0.11512925f;  // ln(10) / 20
 // The limiter works this far under the requested ceiling: covers its own ≤ 0.05 dB leak plus the downsampling
 // filters' ripple (~0.1 dB), so the 48 kHz output's true peak stays at or under limitDb (mix_test proves it).
 constexpr float kTruePeakMarginDb = 0.3f;
+// Master clipper (Crunch): its curve flattens towards this far above the limiter's ceiling; the limiter takes the rest.
+constexpr float kClipOverCeilingDb = 2.f;
 
 template <class Design>
 void design(auto& eq, bool on, Design d) {
@@ -52,6 +54,9 @@ Mixer::Mixer(float sampleRate)
   reverb_.configure(sr_, kBlock, 2);
   reverb_.dry = 0;  // a send: wet only
   delay_.resize(2, maxDelayFrames_ + kBlock + 1);
+  clip_.configure(sr_, kBlock, 2);
+  clip_.toneHz = 20000;  // no tone shaping: just the curve
+  clip_.cutHz = 20;      // the kick and 808 lows are what's loudest; let them into the clipper
   limiter_.configure(4 * sr_, 4 * kBlock, 2);
   limiter_.attackMs = 2;  // = lookahead
   limiter_.holdMs = 2;
@@ -112,13 +117,15 @@ void Mixer::apply(const Mix& mix, int strips) {
   }
   const bool master = b_.limitDb < 0;
   if (master) {
-    limiter_.inputGain = std::exp(b_.masterGainDb * kDbToLn);
     ceiling_ = std::exp((b_.limitDb - kTruePeakMarginDb) * kDbToLn);
     limiter_.outputLimit = ceiling_;
+    gainTarget_ = std::exp(b_.masterGainDb * kDbToLn);
+    clip_.drive = std::exp(-(b_.limitDb - kTruePeakMarginDb + kClipOverCeilingDb) * kDbToLn);  // x·drive ≈ 1 at the knee
     if (!masterOn_) {
       up1_.reset();
       up2_.reset();
       limiter_.reset();
+      clip_.reset();
     }
   }
   masterOn_ = master;
@@ -148,6 +155,8 @@ void Mixer::reset() {
   up1_.reset();
   up2_.reset();
   limiter_.reset();
+  clip_.reset();
+  gain_ = gainTarget_;
 }
 
 template <class Fx>
@@ -253,6 +262,19 @@ void Mixer::process(int strips, float* outL, float* outR, int n) {
 
 void Mixer::master(float* l, float* r, int n) {
   if (!masterOn_) return;
+  // gain ramps across the chunk towards the target (~20 ms one-pole per chunk): no zipper when loudness re-tunes
+  const float g0 = gain_;
+  approach(gain_, gainTarget_, smooth_);
+  const float step = (gain_ - g0) / n;
+  for (int i = 0; i < n; ++i) {
+    const float g = g0 + step * (i + 1);
+    l[i] *= g;
+    r[i] *= g;
+  }
+  // soft clip before limiting (the hip-hop mastering order): the fastest drum peaks get rounded here instead of
+  // making the limiter duck the whole mix. Crunch band-limits its own output (2× + anti-aliased curve), so the
+  // limiter below still sees every inter-sample peak; a clip at the 4× rate would overshoot after downsampling.
+  run(clip_, l, r, n);
   float* io[2] = {l, r};
   up1_.up(io, n);
   float* mid[2] = {up1_[0], up1_[1]};

@@ -39,7 +39,7 @@ export default function Studio() {
   const [mood, setMood] = useState<Mood>("boomBap");
   const [playing, setPlaying] = useState(false);
   const [knobs, setKnobs] = useState<Knobs>(DEFAULT_KNOBS);
-  const [target, setTarget] = useState<LoudnessTarget>("streaming");
+  const [target, setTarget] = useState<LoudnessTarget>("loud");
   const [exporting, setExporting] = useState(false);
   const gainDb = useRef(0); // live master gain: the one the export would use, so live sounds like the export
   const tuning = useRef(0);
@@ -58,15 +58,17 @@ export default function Studio() {
       await a.setProgram(program("boomBap", DEFAULT_KNOBS));
       await a.setSong(boomBapDemo());
       console.log("[studio]", JSON.stringify({ step: "kit loaded", platform: a.platform, ...kit }));
-      const live = await masterDemo(a, "boomBap", DEFAULT_KNOBS, "streaming", LIVE_LOOPS);
+      const live = await masterDemo(a, "boomBap", DEFAULT_KNOBS, "loud", LIVE_LOOPS);
       gainDb.current = live.gainDb;
       await a.setProgram(program("boomBap", DEFAULT_KNOBS, live.gainDb));
       setStatus(`kit loaded: ${kit.files} samples in ${kit.ms} ms`);
       setAudio(a);
+      // dev hook: lets a debugger (or the browser console) render and measure mixes on the real engine
+      if (__DEV__) Object.assign(globalThis, { __gfStudio: { a, program, masterDemo, DEMOS } });
       // the P1 export bar, measured on this platform in the background (logs only; playing works meanwhile):
       // each mood × target, 8 bars, within ± 0.5 LU and ≤ −1 dBTP
       for (const m of ["boomBap", "trap"] as const)
-        for (const t of ["streaming", "club"] as const) {
+        for (const t of ["loud", "streaming"] as const) {
           const t0 = performance.now();
           const r = await masterDemo(a, m, DEFAULT_KNOBS, t, EXPORT_LOOPS);
           const ms = Math.round(performance.now() - t0);
@@ -165,11 +167,11 @@ export default function Studio() {
 
       <Text style={s.label}>Loudness</Text>
       <View style={s.row}>
-        {(["streaming", "club"] as const).map((t) => (
+        {(["loud", "streaming"] as const).map((t) => (
           <Pressable key={t} accessibilityRole="button" accessibilityLabel={`${t} ${LOUDNESS_TARGETS[t]} LUFS`}
             accessibilityState={{ selected: target === t }} onPress={() => pickTarget(t)}
             style={[s.chip, target === t && s.chipOn]} disabled={!audio}>
-            <Text style={s.text}>{t === "streaming" ? "Streaming" : "Club"} {LOUDNESS_TARGETS[t]}</Text>
+            <Text style={s.text}>{t === "loud" ? "Loud" : "Streaming"} {LOUDNESS_TARGETS[t]}</Text>
           </Pressable>
         ))}
       </View>

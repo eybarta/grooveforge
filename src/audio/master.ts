@@ -1,5 +1,6 @@
-/** Export targets (integrated LUFS). The engine's limiter holds the true peak at or under −1 dBTP. */
-export const LOUDNESS_TARGETS = { streaming: -14, club: -9 } as const;
+/** Loudness targets (integrated LUFS): Loud is hip-hop-typical and the default; Streaming is what Spotify plays at.
+ *  The engine's limiter holds the true peak at or under −1 dBTP. */
+export const LOUDNESS_TARGETS = { loud: -9, streaming: -14 } as const;
 export type LoudnessTarget = keyof typeof LOUDNESS_TARGETS;
 
 /** The CLAUDE.md export bar: target ± 0.5 LU, ≤ −1 dBTP. */

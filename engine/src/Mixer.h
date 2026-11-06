@@ -28,7 +28,8 @@ class Mixer {
   void reset();
   /** Writes the mixed chunk (n ≤ kBlock) to out. */
   void process(int strips, float* outL, float* outR, int n);
-  /** Master, in place: gain → limiter at 4× the rate (so inter-sample peaks obey the ceiling). Off while limitDb ≥ 0. */
+  /** Master, in place: gain → soft clip → limiter at 4× the rate (so inter-sample peaks obey the ceiling).
+   *  Off while limitDb ≥ 0. */
   void master(float* l, float* r, int n);
 
  private:
@@ -67,7 +68,9 @@ class Mixer {
 
   bool masterOn_ = false;
   float ceiling_ = 1;  // linear, at the 4× rate
+  float gain_ = 1, gainTarget_ = 1;  // master gain (linear), ramped
   signalsmith::rates::Oversampler2xFIR<float> up1_{2, kBlock}, up2_{2, 2 * kBlock};  // 48 → 96 → 192 kHz
+  signalsmith::basics::CrunchFloat clip_;
   signalsmith::basics::LimiterFloat limiter_;
 
   float drumL_[kBlock], drumR_[kBlock], revL_[kBlock], revR_[kBlock], delL_[kBlock], delR_[kBlock];

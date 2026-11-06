@@ -22,10 +22,10 @@ describe("masterTo", () => {
     expect(m).toMatchObject({ lufs: -14, gainDb: 6, renders: 2, ok: true });
   });
 
-  it("follows the limiter's flattening slope to the club target", async () => {
+  it("follows the limiter's flattening slope to the loud target", async () => {
     const { gains, render, measure } = fakeChain(limited);
-    const m = await masterTo(LOUDNESS_TARGETS.club, render, measure);
-    expect(Math.abs(m.lufs - LOUDNESS_TARGETS.club)).toBeLessThanOrEqual(0.2);
+    const m = await masterTo(LOUDNESS_TARGETS.loud, render, measure);
+    expect(Math.abs(m.lufs - LOUDNESS_TARGETS.loud)).toBeLessThanOrEqual(0.2);
     expect(m.ok).toBe(true);
     expect(gains.length).toBeLessThanOrEqual(6);
   });
