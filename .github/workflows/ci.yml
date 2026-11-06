@@ -20,13 +20,15 @@ jobs:
           version: 6.0.13 # same as the local toolchain (brew emscripten 6.0.13)
 
       - run: npm ci
+      - name: sox (decodes the FLAC kit for the export-bar test)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends sox libsox-fmt-base
       - name: Build engine → WASM
         run: npm run build:wasm
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Lint
         run: npx expo lint
-      - name: Unit + golden tests (song model, latency, WAV, WASM parity, scorer, golden floors)
+      - name: Unit + golden tests (song model, latency, WAV, WASM parity, export bar, scorer, golden floors)
         run: npx vitest run
       - name: C++ engine tests
         run: npm run test:engine
