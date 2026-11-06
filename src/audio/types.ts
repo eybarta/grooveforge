@@ -24,6 +24,12 @@ export interface EngineProgram {
   mix?: Float32Array;
 }
 
+/**
+ * iOS audio-session mode (web: no-op). measurement = no system processing on mic or output (Apple: lower playback
+ * level); default = normal processing, louder speaker.
+ */
+export type SessionMode = "measurement" | "default";
+
 /** The C++ engine on each platform: engine.web.ts (Web Audio + WASM worklet), engine.native.ts (audio-api + JSI). */
 export interface AudioEngine {
   platform: string;
@@ -41,6 +47,7 @@ export interface AudioEngine {
   start(): Promise<void>;
   stop(): Promise<void>;
   setDrive(amount: number): void;
+  setSessionMode(mode: SessionMode): void;
   captureStart(): void;
   /** Mic input and engine output (left), sample-aligned on the engine's frame clock. */
   captureStop(): Promise<{ input: Float32Array; output: Float32Array }>;

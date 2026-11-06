@@ -6,7 +6,7 @@ import { saveWav } from "@/audio/saveWav";
 import { createAudioEngine } from "@/audio/engine";
 import { calibrate, mixTakeWithLoop, takeLevel, verifyAlignment } from "@/audio/spikeRuns";
 import { HOST_REFERENCE, loopSong } from "@/audio/spikeSongs";
-import type { AudioEngine } from "@/audio/types";
+import type { AudioEngine, SessionMode } from "@/audio/types";
 import { encodeWav, fingerprint } from "@/audio/wav";
 import { LoopBeam } from "@/components/LoopBeam";
 
@@ -20,6 +20,7 @@ export default function Spike() {
   const [busy, setBusy] = useState<string | null>(null);
   const [route, setRoute] = useState<Route>("wired");
   const [drive, setDrive] = useState(0);
+  const [sessionMode, setSessionMode] = useState<SessionMode>("measurement");
   const [rtlMs, setRtlMs] = useState<number | null>(null);
   const [take, setTake] = useState<{ input: Float32Array; output: Float32Array } | null>(null);
   const [log, setLog] = useState<string[]>([]);
@@ -76,7 +77,7 @@ export default function Spike() {
     const c = await calibrate(a);
     setRtlMs(c.rtlMs);
     report("latency", {
-      rtlMs: c.rtlMs, repeatabilityMs: c.repeatabilityMs, reliable: c.reliable, runs: c.runs,
+      rtlMs: c.rtlMs, repeatabilityMs: c.repeatabilityMs, reliable: c.reliable, runs: c.runs, sessionMode,
       ioRoute: await a.route(), reportedSec: a.reportedLatency(),
     });
   });
@@ -139,6 +140,13 @@ export default function Spike() {
       <View style={s.row}>
         {(["wired", "bluetooth", "speaker"] as const).map((r) => (
           <Chip key={r} label={r} on={route === r} onPress={() => setRoute(r)} />
+        ))}
+      </View>
+
+      <Text style={s.label}>iOS audio mode (test: calibrate in each)</Text>
+      <View style={s.row}>
+        {(["measurement", "default"] as const).map((m) => (
+          <Chip key={m} label={m} on={sessionMode === m} onPress={() => { setSessionMode(m); audio?.setSessionMode(m); }} />
         ))}
       </View>
 

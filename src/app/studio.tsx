@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { createAudioEngine } from "@/audio/engine";
 import { kitProgram, type Mood } from "@/audio/kit";
 import { loadKit } from "@/audio/loadKit";
 import { LOUDNESS_TARGETS, masterTo, type LoudnessTarget } from "@/audio/master";
 import { DEFAULT_KNOBS, mixFor, type Knobs } from "@/audio/mix";
 import { saveWav } from "@/audio/saveWav";
-import type { AudioEngine, EngineProgram } from "@/audio/types";
+import type { AudioEngine, EngineProgram, SessionMode } from "@/audio/types";
 import { encodeWav } from "@/audio/wav";
 import { LoopBeam } from "@/components/LoopBeam";
 import { boomBapDemo, trapDemo } from "@/song/demoGrooves";
@@ -41,6 +41,7 @@ export default function Studio() {
   const [knobs, setKnobs] = useState<Knobs>(DEFAULT_KNOBS);
   const [target, setTarget] = useState<LoudnessTarget>("loud");
   const [exporting, setExporting] = useState(false);
+  const [sessionMode, setSessionModeState] = useState<SessionMode>("measurement");
   const gainDb = useRef(0); // live master gain: the one the export would use, so live sounds like the export
   const tuning = useRef(0);
 
@@ -112,6 +113,14 @@ export default function Studio() {
     await tune(audio, mood, knobs, t);
   };
 
+  // temporary A/B (P1 review): is iOS's default session mode louder on the speaker than measurement mode?
+  const pickSessionMode = (m: SessionMode) => {
+    if (!audio) return;
+    setSessionModeState(m);
+    audio.setSessionMode(m);
+    report("session mode", { mode: m });
+  };
+
   const exportWav = async () => {
     if (!audio || exporting) return;
     setExporting(true);
@@ -175,6 +184,21 @@ export default function Studio() {
           </Pressable>
         ))}
       </View>
+
+      {Platform.OS === "ios" && (
+        <>
+          <Text style={s.label}>iOS audio mode (test)</Text>
+          <View style={s.row}>
+            {(["measurement", "default"] as const).map((m) => (
+              <Pressable key={m} accessibilityRole="button" accessibilityLabel={`${m} mode`}
+                accessibilityState={{ selected: sessionMode === m }} onPress={() => pickSessionMode(m)}
+                style={[s.chip, sessionMode === m && s.chipOn]} disabled={!audio}>
+                <Text style={s.text}>{m === "measurement" ? "Measurement" : "Default"}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      )}
 
       <Pressable accessibilityRole="button" accessibilityLabel={playing ? "Stop" : "Play"} onPress={toggle}
         disabled={!audio} style={[s.btn, !audio && s.off]}>

@@ -132,6 +132,7 @@ export async function createAudioEngine(): Promise<AudioEngine> {
       await live.call({ type: "stop" });
     },
     setDrive: (amount) => void live.call({ type: "drive", amount }),
+    setSessionMode: () => {}, // browsers expose no session mode
     captureStart: () => void live.call({ type: "captureStart" }),
     captureStop: async () => {
       const r = await live.call({ type: "captureStop" });

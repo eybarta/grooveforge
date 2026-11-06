@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 import { AudioContext, AudioManager, AudioRecorder, decodeAudioData, OfflineAudioContext } from "react-native-audio-api";
 import { defaultInstruments, songToEngineEvents } from "@/song/time";
 import type { Song } from "@/song/types";
-import { CAPTURE_SECONDS, SAMPLE_RATE, type AudioEngine, type DecodedSample, type EngineProgram } from "./types";
+import { CAPTURE_SECONDS, SAMPLE_RATE, type AudioEngine, type DecodedSample, type EngineProgram, type SessionMode } from "./types";
 
 const ab = (x: Float32Array) => x.buffer.slice(x.byteOffset, x.byteOffset + x.byteLength) as ArrayBuffer;
 
@@ -21,11 +21,14 @@ function setSong(node: GfEngineNode, song: Song, sampleRate: number) {
 const loadSample = (node: GfEngineNode, slot: number, s: DecodedSample) =>
   node.engine.loadSample(slot, ab(s.l), s.r === s.l ? null : ab(s.r), s.sampleRate);
 
+/** A2DP keeps Bluetooth output on the built-in mic; audio-api applies a change at once if the session is active. */
+function setSessionMode(mode: SessionMode) {
+  AudioManager.setSystemOptions({ ios: { category: "playAndRecord", mode, options: ["allowBluetoothA2DP", "defaultToSpeaker"] } });
+}
+
 export async function createAudioEngine(): Promise<AudioEngine> {
-  // measurement mode = no iOS voice processing on the route; A2DP keeps Bluetooth output on the built-in mic
-  AudioManager.setSystemOptions({
-    ios: { category: "playAndRecord", mode: "measurement", options: ["allowBluetoothA2DP", "defaultToSpeaker"] },
-  });
+  // measurement mode = no iOS processing on the mic (CLAUDE.md); the Studio may switch to default while only playing
+  setSessionMode("measurement");
   if ((await AudioManager.requestRecordingPermissions()) !== "Granted") throw new Error("microphone permission denied");
   await AudioManager.setAudioSessionActivity(true);
 
@@ -74,6 +77,7 @@ export async function createAudioEngine(): Promise<AudioEngine> {
       node.engine.stop();
     },
     setDrive: (amount) => node.engine.setDrive(amount),
+    setSessionMode,
     captureStart: () => node.engine.captureStart(),
     captureStop: async () => {
       const { input, output } = node.engine.captureStop();
