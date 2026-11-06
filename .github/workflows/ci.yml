@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [v2, main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - uses: mymindstorm/setup-emsdk@v16
+        with:
+          version: 6.0.13 # same as the local toolchain (brew emscripten 6.0.13)
+
+      - run: npm ci
+      - name: Build engine → WASM
+        run: npm run build:wasm
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Lint
+        run: npx expo lint
+      - name: Unit + golden tests (song model, latency, WAV, WASM parity, scorer, golden floors)
+        run: npx vitest run
+      - name: C++ engine tests
+        run: npm run test:engine
+      - name: Web bundle
+        run: npx expo export --platform web
