@@ -92,7 +92,15 @@ CI runs the third column on every push (`src/audio/export.wasm.test.ts`).
 - **iOS audio-session mode.** Eyal: Default mode is "definitely louder" on the speaker than Measurement mode, which
   Apple documents as lower-output. Plan: Default while only playing, Measurement while recording. **Waiting on** a
   latency calibration in each mode on the speaker; the toggles are on the Spike and Studio screens.
-- **Listening on good speakers** (headphones / the JBL) for Punch, Space and the clipper.
+- **Knob extremes, heard on the JBL (Eyal, 2026-11-07): knobs now audible, two notes, deferred (not a gate item; the
+  A/B uses the default knobs).**
+  - Punch 100: big low end that distorts as the volume goes up. Measured (Loud master): Punch 100 raises the kick by
+    3.9 LU, and the master clips 13.6 dB off the peaks (Boom Bap; default 10.7) / 10.6 dB (Trap; default 6.8). Candidate
+    fix: gain-compensated Punch (same attack/tail contrast, no level rise). First check: does Streaming at Punch 100 still
+    distort with the speaker turned up? If yes, it's the speaker.
+  - Space 100: "maybe echoes on the hats, maybe just reverb". Measured: the reverb, not the delay (snare reverb tail
+    6.5 LU under the dry snare; delay 14.4 LU under), with a 4–6 s decay in a 50–60 ms room. Candidate fix: Space grows
+    the room, not only the decay.
 - **Export has no tail.** The file stops hard at bar 8, so reverb and delay are cut. Planned with the P5 export work.
 - **Saturation latency** of 0.3–0.7 ms is not compensated. It's inaudible next to the 17 ms round trip, but it is
   not zero.
