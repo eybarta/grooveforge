@@ -1,10 +1,9 @@
-# Phase 3 · Neon UI: gate report (draft)
+# Phase 3 · Neon UI: gate report
 
 Date: 2026-11-08 · Branch `v2` · CI green · Scope: **iOS + web** (Android deferred).
 
-**Status: built. The iPhone and Brave hold 120 fps during playback (no dropped frames on the iPhone; one in Brave's
-first 10 s). The forge follows the motion spec; Eyal chose a continuous Record → Forge → Studio flow over the film's
-exact layout. Waiting on: Eyal's look-and-feel verdict and his OK.**
+**Status: passed, approved by Eyal 2026-11-08** ("Amazing much better! Let's move on"). The iPhone and Brave hold
+120 fps during playback; the forge follows the motion spec as one continuous Record → Forge → Studio screen.
 
 ## Gate
 
@@ -53,6 +52,11 @@ unevenly the engine's clock reads arrive (audio buffers); it settles after the f
   Side by side with the spec, aligned at the Stop tap: `out/forge/flow-vs-spec.mp4`
   (`URL="http://localhost:8081/?forge=demo&t=0" SPEC_OFFSET=1.0714 node scripts/capture-forge.mjs video`).
   Pixel SSIM doesn't apply any more (different layout); the beats line up.
+- **The orb becomes the bar** (Eyal's two rounds of notes on the iPhone: "clunky at the end", then "mutate it into
+  the bar", then "smooth, natural, pixel-perfect"): the orb's shader works on a rounded box's distance field, so one
+  shader draws the orb, every shape between and the progress bar; it lives on a full-screen layer, so nothing is
+  handed over; it falls accelerating onto the record button, which dissolves into it, and the stretch starts with
+  the fall's momentum (`springV`).
 
 ## What P3 built
 
