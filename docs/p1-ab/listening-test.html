@@ -148,7 +148,37 @@ function shuffle(list) {
 }
 
 const run = { device: null, order: shuffle(PAIRS), i: 0, picks: {} };
-let audio = [], heard = [false, false], playing = -1, raf = 0, sides = [];
+// Web Audio, not <audio>: each clip is fetched and decoded once, then looped from memory. That sidesteps the
+// media-element loading quirks of iPhone browsers and in-app viewers, and plays with the ringer switch on silent.
+let ctx = null, buffers = [null, null], loadId = 0, source = null, startedAt = 0, waiting = -1;
+let heard = [false, false], playing = -1, raf = 0, sides = [];
+
+function audioContext() {
+  if (!ctx) {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) { /* older Safari */ }
+  }
+  return ctx;
+}
+function showError(text) { $("error").textContent = text; $("error").hidden = false; }
+async function loadPair(pair) {
+  const id = ++loadId;
+  buffers = [null, null];
+  try {
+    const decoded = await Promise.all(sides.map(async (f) => {
+      const r = await fetch(`audio/${pair.id}-${f}.wav`);
+      if (!r.ok) throw new Error(`the clip didn't download (HTTP ${r.status})`);
+      const bytes = await r.arrayBuffer();
+      return new Promise((ok, fail) => audioContext().decodeAudioData(bytes, ok, (e) => fail(new Error(`this browser couldn't decode the clip (${e && e.name || "error"})`))));
+    }));
+    if (id !== loadId) return;
+    buffers = decoded;
+    if (waiting >= 0) { const k = waiting; waiting = -1; start(k, 0); }
+    render();
+  } catch (e) {
+    if (id === loadId) { waiting = -1; render(); showError(`Can't play this pair: ${e.message}. Reload the page, or try Chrome or Safari.`); }
+  }
+}
 
 document.querySelectorAll("[data-device]").forEach((b) => b.addEventListener("click", () => {
   run.device = b.dataset.device;
@@ -161,10 +191,9 @@ function showPair() {
   stop();
   const pair = run.order[run.i];
   sides = coin() ? ["x", "y"] : ["y", "x"]; // [file behind A, file behind B], fresh per pair and listener
-  audio = sides.map((f) => Object.assign(new Audio(`audio/${pair.id}-${f}.wav`), { loop: true, preload: "auto" }));
-  audio.forEach((a) => a.addEventListener("error", () => { $("error").textContent = "A clip didn't load. Check your connection, then tap the pad again."; $("error").hidden = false; }));
   heard = [false, false];
   $("error").hidden = true;
+  loadPair(pair);
   $("pair-name").textContent = pair.name;
   $("pair-tempo").textContent = `${pair.bpm} BPM · loop`;
   $("count").textContent = `Pair ${run.i + 1} of ${PAIRS.length}`;
@@ -172,38 +201,50 @@ function showPair() {
   render();
 }
 
+const position = () => (playing >= 0 ? (ctx.currentTime - startedAt) % buffers[playing].duration : 0);
 function play(k) {
-  if (playing === k) { stop(); return; }
-  const from = playing >= 0 ? audio[playing].currentTime : audio[k].currentTime;
-  if (playing >= 0) audio[playing].pause();
-  audio[k].currentTime = from % (audio[k].duration || Infinity);
-  audio[k].play().then(() => { heard[k] = true; render(); }).catch(() => {
-    $("error").textContent = "Your browser blocked playback. Tap the pad again.";
-    $("error").hidden = false;
-  });
+  if (playing === k || waiting === k) { stop(); return; }
+  audioContext().resume(); // inside the tap: unlocks audio on iPhones
+  $("error").hidden = true;
+  if (!buffers[k]) { stopSource(); playing = -1; waiting = k; render(); return; } // starts when the clip arrives
+  start(k, position()); // switching keeps the spot in the loop
+}
+function start(k, at) {
+  stopSource();
+  const s = ctx.createBufferSource();
+  s.buffer = buffers[k];
+  s.loop = true;
+  s.connect(ctx.destination);
+  s.start(0, at % buffers[k].duration);
+  source = s;
+  startedAt = ctx.currentTime - at;
   playing = k;
+  heard[k] = true;
   render();
   cancelAnimationFrame(raf);
   tick();
 }
+function stopSource() {
+  if (source) { try { source.stop(); } catch (e) { /* already stopped */ } source.disconnect(); source = null; }
+}
 function stop() {
-  if (playing >= 0) audio[playing].pause();
+  stopSource();
   playing = -1;
+  waiting = -1;
   cancelAnimationFrame(raf);
   render();
 }
 const clock = (s) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 function tick() {
   if (playing < 0) return;
-  const a = audio[playing];
-  $("readout").textContent = `${playing ? "B" : "A"}  ${clock(a.currentTime)} / ${clock(a.duration || 0)}`;
+  $("readout").textContent = `${playing ? "B" : "A"}  ${clock(position())} / ${clock(buffers[playing].duration)}`;
   raf = requestAnimationFrame(tick);
 }
 function render() {
   ["a", "b"].forEach((n, k) => {
     $(`pad-${n}`).setAttribute("aria-pressed", String(playing === k));
     $(`pad-${n}`).setAttribute("aria-label", `${playing === k ? "Stop" : "Play"} version ${n.toUpperCase()}`);
-    $(`hint-${n}`).textContent = playing === k ? "playing · tap to stop" : heard[k] ? "heard · tap to play" : "tap to play";
+    $(`hint-${n}`).textContent = playing === k ? "playing · tap to stop" : waiting === k ? "loading…" : heard[k] ? "heard · tap to play" : "tap to play";
   });
   const ready = heard[0] && heard[1];
   $("pick-a").disabled = $("pick-b").disabled = !ready;
@@ -218,7 +259,7 @@ function pick(k) {
   run.i++;
   if (run.i < PAIRS.length) { showPair(); return; }
   stop();
-  audio = [];
+  buffers = [null, null];
   $("trial").hidden = true;
   $("done").hidden = false;
   $("code").textContent = `GF1.${run.device}.${PAIRS.map((p) => run.picks[p.id]).join("")}`;
