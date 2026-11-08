@@ -67,7 +67,7 @@ Record (audio-reactive orb, count-in rings, live sparks per hit) → **Forge tra
 - [ ] Tempo/downbeat/swing; hum → 808 notes.
 - **Gate:** onset F1 ≥ 0.92, class accuracy ≥ 0.90, record→playback ≤ 2.5 s.
 
-### P3 · Neon UI (weeks 5–8, parallel to P2): built; gate waiting on Brave numbers and Eyal's verdict, see `docs/p3-report.md`
+### P3 · Neon UI (weeks 5–8, parallel to P2): built; gate waiting on Eyal's verdict, see `docs/p3-report.md`
 - [ ] Visual sync from the measured output latency (not OS `outputLatency`). Tokens, glass surfaces, lane colours+shapes; Record screen (Skia orb shader, sparks); Forge transition matching the motion spec; Studio grid/beam/knobs/A-B; reduced motion.
 - **Gate:** 60 fps on a mid-range phone; transition matches the spec video side by side.
 

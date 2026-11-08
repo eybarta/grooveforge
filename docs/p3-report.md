@@ -2,15 +2,15 @@
 
 Date: 2026-11-08 · Branch `v2` · CI green · Scope: **iOS + web** (Android deferred).
 
-**Status: built. The iPhone holds 120 fps with no dropped frames during playback after a real take. The forge
-follows the motion spec; Eyal chose a continuous Record → Forge → Studio flow over the film's exact layout.
-Waiting on: Brave numbers, Eyal's look-and-feel verdict, and his OK.**
+**Status: built. The iPhone and Brave hold 120 fps during playback (no dropped frames on the iPhone; one in Brave's
+first 10 s). The forge follows the motion spec; Eyal chose a continuous Record → Forge → Studio flow over the film's
+exact layout. Waiting on: Eyal's look-and-feel verdict and his OK.**
 
 ## Gate
 
 | Gate item | Target | Result |
 | --- | --- | --- |
-| Animations during playback | 60 fps on a mid-range phone (iPhone 16 Pro until Android returns: optimistic) | ✅ iPhone: **120 fps, 0 dropped frames** in every 5 s window (Studio playing after a recorded take). Brave: *pending* |
+| Animations during playback | 60 fps on a mid-range phone (iPhone 16 Pro until Android returns: optimistic) | ✅ iPhone: **120 fps, 0 dropped frames** in every 5 s window (Studio playing after a recorded take). ✅ Brave (Mac): **120 fps**, 1 dropped frame in the first 10 s, then 0 |
 | Forge vs spec video | matches side by side | The film's motion, ported exactly: stills SSIM **0.94–0.96**. The shipped flow keeps its timing, springs and flight order on the app's real screens (Eyal's call, below) |
 
 ### Frame timing on the iPhone (Studio playing, after Record → Forge)
@@ -20,6 +20,16 @@ Waiting on: Brave numbers, Eyal's look-and-feel verdict, and his OK.**
 | 1 (just after Play) | 119.98 | 0 | 13.7 ms | 1.9 ms |
 | 2 | 120.18 | 0 | 5.4 ms | 0.9 ms |
 | 3 | 120.18 | 0 | 5.2 ms | 0.7 ms |
+
+### Brave on the Mac (Studio playing)
+
+| 5 s window | fps | dropped | raw clock spread | drawn clock spread |
+| --- | --- | --- | --- | --- |
+| 1 (start: the web clock waits for the engine's start frame, then snaps once) | 107.8 | 1 | 23.7 ms | 23.5 ms |
+| 2 | 119.4 | 1 | 4.7 ms | 0.9 ms |
+| 3 | 120.2 | 0 | 4.2 ms | 0.7 ms |
+| 4 | 120.2 | 0 | 2.9 ms | 0.7 ms |
+| 5 | 120.2 | 0 | 3.9 ms | 1.0 ms |
 
 The beam draws the smoothed clock, so what you see moves within ~1 ms of a perfect line. The raw spread is how
 unevenly the engine's clock reads arrive (audio buffers); it settles after the first seconds.
@@ -73,7 +83,6 @@ unevenly the engine's clock reads arrive (audio buffers); it settles after the f
 
 ## Open items
 
-- **Brave fps** (needs the mic permission, which I don't grant myself).
 - **A new take from the Studio**: after the forge, the only way back to Record is reopening the app (P2 defines
   takes 2…n).
 - **The flying hits are the demo groove's** until P2 detects the real ones (the bars they come from are the take's).
