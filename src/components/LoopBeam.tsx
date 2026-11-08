@@ -13,7 +13,7 @@ export function LoopBeam({ clock, latencyFrames, sampleRate, onStats }: {
   onStats: (s: ClockStats) => void;
 }) {
   const width = useSharedValue(0);
-  const pos = usePlayhead(clock, latencyFrames, sampleRate, onStats);
+  const { pos } = usePlayhead(clock, latencyFrames, sampleRate, onStats);
   const beamStyle = useAnimatedStyle(() => ({ transform: [{ translateX: Math.max(0, pos.value) * width.value }] }));
 
   return (

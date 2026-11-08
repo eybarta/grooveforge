@@ -21,11 +21,13 @@ const SNAP_MS = 50;
 
 /**
  * Where the loop is *as heard*, every frame on the UI thread, straight from the engine clock (CLAUDE.md: never
- * through React state). `pos` is 0–1 through the loop, or −1 when stopped. `latencyFrames` = the measured output
- * latency (src/audio/latency.ts `outputLatency`). Every 5 s, `onStats` gets fps, dropped frames and clock jitter.
+ * through React state). `pos` is 0–1 through the loop and `frames` the heard frames since play; both −1 when
+ * stopped. `latencyFrames` = the measured output latency (src/audio/latency.ts `outputLatency`). Every 5 s,
+ * `onStats` gets fps, dropped frames and clock jitter.
  */
 export function usePlayhead(clock: AudioClock, latencyFrames: number, sampleRate: number, onStats?: (s: ClockStats) => void) {
   const pos = useSharedValue(-1);
+  const frames = useSharedValue(-1);
   const latency = useSharedValue(latencyFrames);
   const stats = useSharedValue(FRESH);
   // the drawn clock: runs at exactly the sample rate and is pulled gently toward the bursty engine reads
@@ -39,6 +41,7 @@ export function usePlayhead(clock: AudioClock, latencyFrames: number, sampleRate
     const loop = clock.loopFrames;
     if (!clock.playing || loop <= 0) {
       pos.value = -1;
+      frames.value = -1;
       stats.value = FRESH;
       smooth.value = { frame: 0, t: -1 };
       return;
@@ -51,6 +54,7 @@ export function usePlayhead(clock: AudioClock, latencyFrames: number, sampleRate
     const drawn = Math.abs(error) > (SNAP_MS * sampleRate) / 1000 ? frame : predicted + PULL * error;
     smooth.value = { frame: drawn, t: f.timestamp };
     const shown = drawn - latency.value;
+    frames.value = shown;
     pos.value = (((shown % loop) + loop) % loop) / loop;
     if (!onStats) return;
 
@@ -86,5 +90,5 @@ export function usePlayhead(clock: AudioClock, latencyFrames: number, sampleRate
     }
   });
 
-  return pos;
+  return { pos, frames };
 }

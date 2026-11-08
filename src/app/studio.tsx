@@ -99,7 +99,7 @@ export default function Studio() {
 type GridProps = Omit<Parameters<typeof import("@/ui/StepGrid").StepGrid>[0], "pos">;
 
 function LiveGrid({ audio, latencyFrames, ...grid }: GridProps & { audio: AudioEngine; latencyFrames: number }) {
-  const pos = usePlayhead(audio.clock, latencyFrames, audio.sampleRate, (stats) => console.log("[studio]", JSON.stringify({ step: "clock", ...stats })));
+  const { pos } = usePlayhead(audio.clock, latencyFrames, audio.sampleRate, (stats) => console.log("[studio]", JSON.stringify({ step: "clock", ...stats })));
   return <StepGrid {...grid} pos={pos} />;
 }
 
