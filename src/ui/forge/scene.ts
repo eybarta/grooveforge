@@ -8,8 +8,14 @@ import type { Song } from "@/song/types";
 export const FRAME = { w: 390, h: 844 } as const;
 export const N = 44, GAP = 3, BW = (342 - (N - 1) * GAP) / N, WY = 320;
 export const COLW = (326 - 15 * 4) / 16, ROWH = 18;
-export const cellX = (j: number) => 32 + j * (COLW + 4);
-export const cellY = (r: number) => 532 + r * (ROWH + 4);
+export const cellX = (j: number) => {
+  "worklet";
+  return 32 + j * (COLW + 4);
+};
+export const cellY = (r: number) => {
+  "worklet";
+  return 532 + r * (ROWH + 4);
+};
 /** The film's own take: k kick, s snare, h hat, p perc (a non-hit bar), . quiet. */
 export const FILM_PATTERN = "k..h.s.hk.h..sh.k.kh.s.hk..h.s.h.k.h.sk.h.ph";
 const LANE: Record<string, number> = { k: 0, s: 1, h: 2 };

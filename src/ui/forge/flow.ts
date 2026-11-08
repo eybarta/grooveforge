@@ -23,4 +23,7 @@ export const FLOW = {
 } as const;
 
 /** When the dot for step `step` (0–15) of lane row `row` leaves; it lands FLOW.landAfter later. */
-export const leaves = (step: number, row: number) => FLOW.flight + (step / 16) * FLOW.flightSpan + row * 0.03;
+export const leaves = (step: number, row: number) => {
+  "worklet";
+  return FLOW.flight + (step / 16) * FLOW.flightSpan + row * 0.03;
+};
