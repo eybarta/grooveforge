@@ -33,7 +33,6 @@ import { usePlayhead } from "@/ui/usePlayhead";
 const SPIKE_AUTO = process.env.EXPO_PUBLIC_SPIKE_AUTO;
 const TAKE_BARS = 4; // after a one-bar count-in (P2 makes 2/4/8 a choice)
 const SPRING = { stiffness: 144, damping: 19.2, mass: 1 }; // the film's ω = 12, ζ = 0.8
-const ORB_ON_BUTTON = 96 / 210; // the orb's scale when it lands on the record button
 type El = ComponentRef<typeof View>;
 
 export default function Index() {
@@ -135,7 +134,7 @@ function Session() {
       )}
       {phase !== "studio" && (audio
         ? <RecordView audio={audio} ribbon={ribbon} forgeT={phase === "forge" ? forgeT : null} ribbonEl={ribbonEl} buttonEl={buttonEl}
-            onTake={onTake} reduceMotion={reduceMotion} />
+            onTake={onTake} reduceMotion={reduceMotion} geom={geom} />
         : <Shell>{error && <Text style={[type.body, s.error]}>{error}</Text>}</Shell>)}
       {phase === "forge" && geom && <ForgeOverlay t={forgeT} geom={geom} ribbon={ribbon} dots={dots} />}
       {phase === "forge" && <ForgingLabel t={forgeT} />}
@@ -171,23 +170,24 @@ function Shell({ children, right, leave }: { children?: ReactNode; right?: React
 }
 
 /** Record (docs/design/1-record.dc.html): count in, beatbox + hum one take over the click. `forgeT` set = leaving. */
-function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceMotion }: {
+function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceMotion, geom }: {
   audio: AudioEngine; ribbon: SharedValue<RibbonBar[]>; forgeT: SharedValue<number> | null; ribbonEl: RefObject<El | null>;
   buttonEl: RefObject<El | null>; onTake: (take: Take | null, mood: Mood) => void; reduceMotion: boolean;
+  geom: ForgeGeom | null;
 }) {
   const rtlMs = useCalibration((c) => c.rtlMs);
   const [mood, setMood] = useState<Mood>("boomBap");
   const [phase, setPhase] = useState<"idle" | "countIn" | "recording" | "saving">("idle");
   const [bar, setBar] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const orbEl = useRef<El>(null);
-  const [orbDy, setOrbDy] = useState(0); // orb centre → record button centre, for falling into it
-  const leaving = forgeT !== null;
-  useEffect(() => { // measured as the forge starts (the orb starts falling a beat later)
-    if (!leaving || !orbEl.current || !buttonEl.current) return;
-    const o = orbEl.current.getBoundingClientRect(), b = buttonEl.current.getBoundingClientRect();
-    setOrbDy(b.y + b.height / 2 - (o.y + o.height / 2));
-  }, [leaving, buttonEl]);
+  const self = useRef<El>(null), orbEl = useRef<El>(null);
+  // the orb is drawn by a full-screen layer (so it can fall into the bar); its place on Record is measured here
+  const [orbCenter, setOrbCenter] = useState<{ x: number; y: number } | null>(null);
+  const measureOrb = () => {
+    if (!orbEl.current || !self.current) return;
+    const o = orbEl.current.getBoundingClientRect(), r = self.current.getBoundingClientRect();
+    setOrbCenter({ x: o.x - r.x + o.width / 2, y: o.y - r.y + o.height / 2 });
+  };
 
   const sr = audio.sampleRate;
   const bpm = DEMOS[mood]().bpm;
@@ -264,21 +264,15 @@ function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceM
     const u = spring(forgeT.value - FLOW.collapse, 14, 0.85);
     return { opacity: Math.max(0, 1 - u), transform: [{ translateY: -24 * u }] };
   });
-  // the orb falls onto the record button, shrinking to its size (210 → 96 px); on landing the overlay carries on with
-  // the two as one shape that stretches into the progress bar (src/ui/forge/ForgeOverlay.tsx)
-  const sink = useAnimatedStyle(() => {
-    if (!forgeT) return { opacity: 1, transform: [{ translateY: 0 }, { scale: 1 }] };
-    const u = prog(forgeT.value, FLOW.orbFall[0], FLOW.orbFall[1]);
-    const fall = u * u; // ease-in
-    return { opacity: u >= 1 ? 0 : 1, transform: [{ translateY: orbDy * fall }, { scale: 1 - (1 - ORB_ON_BUTTON) * fall }] };
-  });
   const timerFade = useDerivedValue(() => (forgeT ? 1 - prog(forgeT.value, FLOW.collapse, FLOW.collapse + 0.15) : 1));
   const handedOver = forgeT ? { opacity: 0 } : null;
 
   const label = phase === "countIn" ? "COUNT-IN" : phase === "recording" ? `RECORDING · BAR ${bar} OF ${TAKE_BARS}` : phase === "saving" ? `RECORDING · BAR ${TAKE_BARS} OF ${TAKE_BARS}` : "TAP TO RECORD";
   const busy = phase !== "idle";
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents={forgeT ? "none" : "auto"}>
+    <View ref={self} style={StyleSheet.absoluteFill} pointerEvents={forgeT ? "none" : "auto"} collapsable={false}>
+      <Orb center={orbCenter} level={level} now={now} sparks={sparks} beat={beat} text={timer} textOpacity={timerFade}
+        breath={breath} reduceMotion={reduceMotion} forge={forgeT && geom ? { t: forgeT, button: geom.button, barW: geom.ribbon.w } : null} />
       <Shell leave={leave} right={<Link href="/studio" style={[type.button, s.link]} accessibilityRole="button">Studio</Link>}>
         <Animated.View style={[s.chips, leave]}>
           <Chip label="Boom Bap" selected={mood === "boomBap"} onPress={() => setMood("boomBap")} disabled={busy} />
@@ -286,9 +280,7 @@ function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceM
           <Text style={[type.stat, s.muted]}>Click {bpm} BPM</Text>
         </Animated.View>
         <View style={s.center}>
-          <Animated.View ref={orbEl} style={[{ alignSelf: "stretch" }, sink]} collapsable={false}>
-            <Orb level={level} now={now} sparks={sparks} beat={beat} text={timer} textOpacity={timerFade} breath={breath} reduceMotion={reduceMotion} />
-          </Animated.View>
+          <View ref={orbEl} style={s.orbSlot} onLayout={measureOrb} collapsable={false} />
           <Animated.Text style={[type.caps, s.label, leave]} accessibilityLiveRegion="polite">{label}</Animated.Text>
         </View>
         <View ref={ribbonEl} style={handedOver} collapsable={false}>
@@ -323,6 +315,7 @@ const s = StyleSheet.create({
   link: { color: color.soft, padding: 12, minHeight: 44 },
   chips: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 18 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  orbSlot: { height: 380, alignSelf: "stretch" },
   label: { color: "#E9E3FF", position: "absolute", top: "50%", marginTop: 26, textAlign: "center" },
   muted: { color: color.muted, marginLeft: 4 },
   recRow: { alignItems: "center", marginTop: 12 },

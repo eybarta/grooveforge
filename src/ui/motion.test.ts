@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { spring, track } from "./motion";
+import { spring, springV, track } from "./motion";
 
 describe("motion spec helpers", () => {
   it("spring matches a damped oscillator from rest (z 0.8: one small overshoot, settles at 1)", () => {
@@ -12,6 +12,13 @@ describe("motion spec helpers", () => {
     const w = 12, z = 0.8, t = 0.2, h = 1e-4;
     const x = spring(t), v = (spring(t + h) - spring(t - h)) / (2 * h), a = (spring(t + h) - 2 * x + spring(t - h)) / (h * h);
     expect(a).toBeCloseTo(-w * w * (x - 1) - 2 * z * w * v, 0);
+  });
+
+  it("springV starts at its given velocity and settles like spring (v0 = 0 is spring)", () => {
+    const h = 1e-5;
+    expect(springV(h, 10, 0.82, 8) / h).toBeCloseTo(8, 2);
+    expect(springV(0.3, 10, 0.82, 0)).toBeCloseTo(spring(0.3, 10, 0.82), 10);
+    expect(springV(3, 10, 0.82, 8)).toBeCloseTo(1, 3);
   });
 
   it("track eases between keys and holds the ends", () => {

@@ -25,6 +25,18 @@ export const spring = (t: number, w = 12, z = 0.8) => {
   const wd = w * Math.sqrt(1 - z * z);
   return 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + ((z * w) / wd) * Math.sin(wd * t));
 };
+/** The same spring, starting with velocity `v0` (units/s): a motion that carries on into it doesn't stop dead first. */
+export const springV = (t: number, w: number, z: number, v0: number) => {
+  "worklet";
+  if (t <= 0) return 0;
+  const wd = w * Math.sqrt(1 - z * z);
+  return 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + ((z * w - v0) / wd) * Math.sin(wd * t));
+};
+export const smoothstep = (a: number, b: number, x: number) => {
+  "worklet";
+  const u = clamp((x - a) / (b - a));
+  return u * u * (3 - 2 * u);
+};
 /** Piecewise [time, value] keys, eased in-out between them. */
 export const track = (t: number, keys: [number, number][]) => {
   "worklet";
