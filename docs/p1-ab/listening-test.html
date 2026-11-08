@@ -31,6 +31,7 @@ h1 { font: 700 clamp(1.6rem, 6vw, 2.2rem)/1.15 var(--display); margin: .4rem 0 0
 h2 { font: 500 1.15rem/1.3 var(--display); margin: 0; text-wrap: balance; }
 p { margin: 0; color: var(--muted); max-width: 65ch; }
 section { display: grid; gap: 1rem; }
+[hidden] { display: none !important; } /* the display rules above would otherwise show hidden sections */
 .panel { background: var(--glass); border: 1px solid var(--line); border-radius: 1.25rem; padding: 1.25rem; display: grid; gap: 1rem; }
 .chips { display: flex; flex-wrap: wrap; gap: .5rem; }
 button {
@@ -70,7 +71,7 @@ button:disabled { opacity: .38; cursor: default; }
 <main>
   <header>
     <div class="eyebrow">GrooveForge · blind listening test</div>
-    <h1>Which beat sounds better?</h1>
+    <h1>Which would you rather hear?</h1>
   </header>
 
   <section id="intro">
@@ -109,8 +110,8 @@ button:disabled { opacity: .38; cursor: default; }
       <p class="err" id="error" hidden></p>
     </div>
     <div class="answers">
-      <button type="button" id="pick-a" disabled>A sounds better</button>
-      <button type="button" id="pick-b" disabled>B sounds better</button>
+      <button type="button" id="pick-a" disabled>I prefer A</button>
+      <button type="button" id="pick-b" disabled>I prefer B</button>
     </div>
     <p class="note" id="pick-note">Play both versions to answer.</p>
   </section>
