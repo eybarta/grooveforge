@@ -25,7 +25,7 @@ export default function Spike() {
   const { rtlMs, setRtlMs } = useCalibration(); // shared: a calibration here also syncs the Studio visuals
   const [take, setTake] = useState<{ input: Float32Array; output: Float32Array } | null>(null);
   const [log, setLog] = useState<string[]>([]);
-  // dev hook: grooveforge://spike?auto=render runs the offline render on launch (no share sheet), for headless checks
+  // dev hook: grooveforge://dev/spike?auto=render runs the offline render on launch (no share sheet), for headless checks
   const { auto } = useLocalSearchParams<{ auto?: string }>();
   const stopRequested = useRef(false);
   // waits up to `ms`, but returns as soon as Stop is tapped

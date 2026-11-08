@@ -50,7 +50,7 @@ CI runs the third column on every push (`src/audio/export.wasm.test.ts`).
     the clean comparison.
   - The POC skips Trap bass notes that land on a kick, and every one does. Its Trap "full beat" and "drums only"
     clips are therefore identical.
-- **Rebuild the set:** `npm run web` → `/ab` → Build, then Download. Each build re-randomises x/y.
+- **Rebuild the set:** `npm run web` → `/dev/ab` → Build, then Download. Each build re-randomises x/y.
 
 ## Performance and assets
 

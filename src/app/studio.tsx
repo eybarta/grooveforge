@@ -1,232 +1,120 @@
-import { useEffect, useRef, useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Stack } from "expo-router";
+import { useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useReducedMotion, useSharedValue } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCalibration } from "@/audio/calibration";
-import { createAudioEngine } from "@/audio/engine";
-import type { Mood } from "@/audio/kit";
 import { outputLatency } from "@/audio/latency";
-import { loadKit } from "@/audio/loadKit";
-import { LOUDNESS_TARGETS, type LoudnessTarget } from "@/audio/master";
-import { DEFAULT_KNOBS, type Knobs } from "@/audio/mix";
-import { saveWav } from "@/audio/saveWav";
-import { masterSong, studioProgram } from "@/audio/studioRender";
-import type { AudioEngine, EngineProgram, SessionMode } from "@/audio/types";
-import { encodeWav } from "@/audio/wav";
-import { LoopBeam } from "@/components/LoopBeam";
-import { boomBapDemo, trapDemo } from "@/song/demoGrooves";
+import { LOUDNESS_TARGETS } from "@/audio/master";
+import type { AudioEngine } from "@/audio/types";
+import { useStudio } from "@/audio/useStudio";
+import { barCells, toggleStep } from "@/song/grid";
+import { loopSeconds } from "@/song/time";
+import { Button, Chip, Glass, PlayButton } from "@/ui/controls";
+import { Knob } from "@/ui/Knob";
+import { StepGrid } from "@/ui/StepGrid";
+import { color, space, type } from "@/ui/theme";
+import { usePlayhead } from "@/ui/usePlayhead";
 
-const DEMOS: Record<Mood, () => ReturnType<typeof boomBapDemo>> = { boomBap: boomBapDemo, trap: trapDemo };
-const KNOB_STEPS = [0, 0.25, 0.5, 0.75, 1];
+const LANES = ["kick", "snare", "hatClosed", "hatOpen", "perc", "bass"] as const;
+const SWING_MIN = 0.5, SWING_RANGE = 0.25; // straight … heavy swing
+const pct = (v: number) => `${Math.round(v * 100)}`;
 
-const EXPORT_LOOPS = 4; // the 2-bar demos → 8 bars
-const LIVE_LOOPS = 2; // enough to find the live gain quickly
-const r2 = (x: number) => Math.round(x * 100) / 100;
-
-/** Kit + mix for a mood's demo, at the knob settings and master gain. */
-const program = (m: Mood, knobs: Knobs, gainDb = 0): EngineProgram => studioProgram(DEMOS[m](), knobs, gainDb);
-
-/** Renders `loops` passes of a mood's demo, mastered to a loudness target. */
-const masterDemo = (a: AudioEngine, m: Mood, knobs: Knobs, target: LoudnessTarget, loops: number) =>
-  masterSong(a, DEMOS[m](), knobs, target, loops);
-
-/** Phase 1 test bench for the studio sound (the real Studio UI is P3). Logs "[studio]" JSON like the spike. */
+/** The Studio (docs/design/3-studio.dc.html): the song as a live grid, the mood, the macro knobs, export. */
 export default function Studio() {
-  const [audio, setAudio] = useState<AudioEngine | null>(null);
-  const [status, setStatus] = useState("starting engine…");
-  const [mood, setMood] = useState<Mood>("boomBap");
-  const [playing, setPlaying] = useState(false);
-  const [knobs, setKnobs] = useState<Knobs>(DEFAULT_KNOBS);
-  const [target, setTarget] = useState<LoudnessTarget>("loud");
-  const [exporting, setExporting] = useState(false);
-  const [sessionMode, setSessionModeState] = useState<SessionMode>("measurement");
+  const st = useStudio();
+  const { song } = st;
+  const insets = useSafeAreaInsets();
+  const reduceMotion = useReducedMotion();
   const rtlMs = useCalibration((c) => c.rtlMs);
-  const gainDb = useRef(0); // live master gain: the one the export would use, so live sounds like the export
-  const tuning = useRef(0);
-
-  const report = (step: string, data: object) => {
-    console.log("[studio]", JSON.stringify({ step, platform: audio?.platform, ...data }));
-    setStatus(`${step}: ${JSON.stringify(data)}`);
-  };
-
-  useEffect(() => {
-    let created: AudioEngine | null = null;
-    (async () => {
-      const a = await createAudioEngine();
-      created = a;
-      const kit = await loadKit(a);
-      await a.setProgram(program("boomBap", DEFAULT_KNOBS));
-      await a.setSong(boomBapDemo());
-      console.log("[studio]", JSON.stringify({ step: "kit loaded", platform: a.platform, ...kit }));
-      const live = await masterDemo(a, "boomBap", DEFAULT_KNOBS, "loud", LIVE_LOOPS);
-      gainDb.current = live.gainDb;
-      await a.setProgram(program("boomBap", DEFAULT_KNOBS, live.gainDb));
-      setStatus(`kit loaded: ${kit.files} samples in ${kit.ms} ms`);
-      setAudio(a);
-      // dev hook: lets a debugger (or the browser console) render and measure mixes on the real engine
-      if (__DEV__) Object.assign(globalThis, { __gfStudio: { a, program, masterDemo, DEMOS } });
-      // the P1 export bar, measured on this platform in the background (logs only; playing works meanwhile):
-      // each mood × target, 8 bars, within ± 0.5 LU and ≤ −1 dBTP
-      for (const m of ["boomBap", "trap"] as const)
-        for (const t of ["loud", "streaming"] as const) {
-          const t0 = performance.now();
-          const r = await masterDemo(a, m, DEFAULT_KNOBS, t, EXPORT_LOOPS);
-          const ms = Math.round(performance.now() - t0);
-          // realtime = seconds of audio rendered per second of rendering (CPU headroom of the whole chain)
-          const realtime = Math.round(((r.renders * r.channels[0]!.length) / a.sampleRate / (ms / 1000)) * 10) / 10;
-          console.log("[studio]", JSON.stringify({ step: "master check", platform: a.platform, mood: m, target: t, lufs: r2(r.lufs), truePeakDb: r2(r.truePeakDb), gainDb: r2(r.gainDb), renders: r.renders, ok: r.ok, ms, realtime }));
-        }
-    })().catch((e) => setStatus(`init failed: ${e}`));
-    return () => void created?.close();
-  }, []);
-
-  /** Applies a setting now (at the last gain), then finds the gain that hits the target and applies that too. */
-  async function tune(a: AudioEngine, m: Mood, k: Knobs, t: LoudnessTarget) {
-    await a.setProgram(program(m, k, gainDb.current));
-    const id = ++tuning.current;
-    const r = await masterDemo(a, m, k, t, LIVE_LOOPS);
-    if (id !== tuning.current) return; // a newer setting won
-    gainDb.current = r.gainDb;
-    await a.setProgram(program(m, k, r.gainDb));
-    report("loudness", { mood: m, target: t, lufs: r2(r.lufs), gainDb: r2(r.gainDb) });
-  }
-
-  // switching mood swaps program + song while playing (lock-free in the engine)
-  const pickMood = async (m: Mood) => {
-    if (!audio) return;
-    setMood(m);
-    await audio.setSong(DEMOS[m]());
-    await tune(audio, m, knobs, target);
-  };
-
-  const setKnob = async (k: keyof Knobs, v: number) => {
-    if (!audio) return;
-    const next = { ...knobs, [k]: v };
-    setKnobs(next);
-    await tune(audio, mood, next, target);
-  };
-
-  const pickTarget = async (t: LoudnessTarget) => {
-    if (!audio) return;
-    setTarget(t);
-    await tune(audio, mood, knobs, t);
-  };
-
-  // temporary A/B (P1 review): is iOS's default session mode louder on the speaker than measurement mode?
-  const pickSessionMode = (m: SessionMode) => {
-    if (!audio) return;
-    setSessionModeState(m);
-    audio.setSessionMode(m);
-    report("session mode", { mode: m });
-  };
-
-  const exportWav = async () => {
-    if (!audio || exporting) return;
-    setExporting(true);
-    setStatus("mastering…");
-    try {
-      const r = await masterDemo(audio, mood, knobs, target, EXPORT_LOOPS);
-      const name = `gf-${mood}-${target}.wav`;
-      await saveWav(encodeWav(r.channels, audio.sampleRate, "24"), name);
-      report("export", { name, lufs: r2(r.lufs), truePeakDb: r2(r.truePeakDb), gainDb: r2(r.gainDb), renders: r.renders, ok: r.ok });
-    } catch (e) {
-      setStatus(`export failed: ${e}`);
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const toggle = async () => {
-    if (!audio) return;
-    if (playing) await audio.stop();
-    else await audio.start();
-    setPlaying(!playing);
+  const [bar, setBar] = useState(0);
+  const shownBar = Math.min(bar, song.bars - 1);
+  const latency = st.audio ? outputLatency(st.audio.reportedLatency(), rtlMs, st.audio.sampleRate) : null;
+  const grid = {
+    lanes: LANES, cells: barCells(song, shownBar, LANES), bar: shownBar, bars: song.bars, loopSeconds: loopSeconds(song),
+    reduceMotion, onToggle: (row: number, step: number) => st.editSong(toggleStep(song, LANES[row]!, shownBar, step)),
   };
 
   return (
-    <ScrollView contentContainerStyle={s.page}>
-      <Text style={s.h1}>Studio sound</Text>
-      <Text style={s.meta}>{audio ? `${audio.platform} · ${audio.sampleRate} Hz` : ""}</Text>
-
-      <Text style={s.label}>Mood</Text>
-      <View style={s.row}>
-        {(["boomBap", "trap"] as const).map((m) => (
-          <Pressable key={m} accessibilityRole="button" accessibilityLabel={m} accessibilityState={{ selected: mood === m }}
-            onPress={() => pickMood(m)} style={[s.chip, mood === m && s.chipOn]} disabled={!audio}>
-            <Text style={s.text}>{m === "boomBap" ? "Boom Bap" : "Trap"}</Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {(["punch", "space"] as const).map((k) => (
-        <View key={k}>
-          <Text style={s.label}>{k === "punch" ? "Punch" : "Space"}</Text>
-          <View style={s.row}>
-            {KNOB_STEPS.map((v) => (
-              <Pressable key={v} accessibilityRole="button" accessibilityLabel={`${k} ${v * 100}%`}
-                accessibilityState={{ selected: knobs[k] === v }} onPress={() => setKnob(k, v)}
-                style={[s.step, knobs[k] === v && s.chipOn]} disabled={!audio}>
-                <Text style={s.text}>{v * 100}</Text>
-              </Pressable>
-            ))}
-          </View>
+    <ScrollView style={s.screen} contentContainerStyle={[s.page, { paddingTop: insets.top + space.pageTop, paddingBottom: insets.bottom + space.pageBottom }]}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <View style={s.header}>
+        <View style={{ flex: 1 }}>
+          <Text style={[type.title, { color: color.text }]}>{song.mood === "trap" ? "Trap demo" : "Boom Bap demo"}</Text>
+          <Text style={[type.stat, s.muted]}>
+            {song.bpm} BPM · swing {pct(song.swing)}% · {LOUDNESS_TARGETS[st.target]} LUFS
+          </Text>
         </View>
-      ))}
+        <PlayButton playing={st.playing} onPress={st.toggle} disabled={!st.audio || st.busy === "calibrate"} />
+      </View>
 
-      <Text style={s.label}>Loudness</Text>
       <View style={s.row}>
-        {(["loud", "streaming"] as const).map((t) => (
-          <Pressable key={t} accessibilityRole="button" accessibilityLabel={`${t} ${LOUDNESS_TARGETS[t]} LUFS`}
-            accessibilityState={{ selected: target === t }} onPress={() => pickTarget(t)}
-            style={[s.chip, target === t && s.chipOn]} disabled={!audio}>
-            <Text style={s.text}>{t === "loud" ? "Loud" : "Streaming"} {LOUDNESS_TARGETS[t]}</Text>
-          </Pressable>
+        <Chip label="Boom Bap" selected={song.mood === "boomBap"} onPress={() => st.setMood("boomBap")} />
+        <Chip label="Trap" selected={song.mood === "trap"} onPress={() => st.setMood("trap")} />
+        <View style={{ flex: 1 }} />
+        {song.bars > 1 && Array.from({ length: song.bars }, (_, b) => (
+          <Chip key={b} label={`${b + 1}`} selected={b === shownBar} onPress={() => setBar(b)} accent={color.cyan} />
         ))}
       </View>
 
-      {Platform.OS === "ios" && (
-        <>
-          <Text style={s.label}>iOS audio mode (test)</Text>
-          <View style={s.row}>
-            {(["measurement", "default"] as const).map((m) => (
-              <Pressable key={m} accessibilityRole="button" accessibilityLabel={`${m} mode`}
-                accessibilityState={{ selected: sessionMode === m }} onPress={() => pickSessionMode(m)}
-                style={[s.chip, sessionMode === m && s.chipOn]} disabled={!audio}>
-                <Text style={s.text}>{m === "measurement" ? "Measurement" : "Default"}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </>
-      )}
-
-      <Pressable accessibilityRole="button" accessibilityLabel={playing ? "Stop" : "Play"} onPress={toggle}
-        disabled={!audio} style={[s.btn, !audio && s.off]}>
-        <Text style={s.text}>{playing ? "Stop" : "Play"}</Text>
+      <Glass style={s.grid}>
+        {st.audio && latency
+          ? <LiveGrid audio={st.audio} latencyFrames={latency.frames} {...grid} />
+          : <IdleGrid {...grid} />}
+      </Glass>
+      <Pressable accessibilityRole="button" onPress={st.runCalibration} disabled={!st.audio || st.busy !== null}
+        accessibilityLabel={latency?.calibrated ? "Recalibrate sync" : "Calibrate sync"} style={s.sync}>
+        <Text style={[type.stat, s.muted]}>
+          {st.busy === "calibrate" ? "Listening for clicks… keep it quiet"
+            : latency?.calibrated ? `Sync ${Math.round((latency.frames / st.audio!.sampleRate) * 1000)} ms · measured · tap to redo`
+              : "Sync not measured yet · tap to calibrate"}
+        </Text>
       </Pressable>
 
-      <Pressable accessibilityRole="button" accessibilityLabel="Export WAV" onPress={exportWav}
-        disabled={!audio || exporting} style={[s.btn, (!audio || exporting) && s.off]}>
-        <Text style={s.text}>{exporting ? "Mastering…" : "Export WAV (24-bit, 8 bars)"}</Text>
-      </Pressable>
+      <View style={s.knobs}>
+        <Knob label="Quantize" value={0} onChange={() => {}} accent={color.cyan} format={() => "–"} disabled />
+        <Knob label="Swing" value={(song.swing - SWING_MIN) / SWING_RANGE} accent={color.magenta}
+          onChange={(v) => st.editSong({ ...song, swing: SWING_MIN + v * SWING_RANGE })} format={(v) => pct(SWING_MIN + v * SWING_RANGE)} />
+        <Knob label="Humanize" value={0} onChange={() => {}} accent={color.lime} format={() => "–"} disabled />
+      </View>
+      <View style={s.knobs}>
+        <Knob label="Punch" value={st.knobs.punch} onChange={(v) => st.setKnob("punch", v)} accent="#FF5A1F" format={pct} />
+        <Knob label="Space" value={st.knobs.space} onChange={(v) => st.setKnob("space", v)} accent="#8B5CFF" format={pct} />
+        <Knob label="Loudness" value={st.target === "loud" ? 1 : 0} steps={2} accent="#FFB020"
+          onChange={(v) => st.setTarget(v >= 0.5 ? "loud" : "streaming")} format={(v) => (v >= 0.5 ? "Loud" : "Stream")} />
+      </View>
 
-      {audio && (
-        <LoopBeam clock={audio.clock} latencyFrames={outputLatency(audio.reportedLatency(), rtlMs, audio.sampleRate).frames}
-          sampleRate={audio.sampleRate} onStats={(st) => console.log("[studio]", JSON.stringify({ step: "clock", ...st }))} />
-      )}
-      <Text style={s.log}>{status}</Text>
+      <View style={s.row}>
+        <View style={{ flex: 1 }}>
+          <Button label="Your mouth ⇄ Studio" onPress={() => {}} disabled accessibilityLabel="Compare with your recording (after you record a take)" />
+        </View>
+        <Button label={st.busy === "export" ? "Mastering…" : "Export"} variant="primary" onPress={st.exportWav}
+          disabled={!st.audio || st.busy !== null} accessibilityLabel="Export WAV, 8 bars" />
+      </View>
+      {st.status ? <Text style={[type.stat, s.muted]}>{st.status}</Text> : null}
     </ScrollView>
   );
 }
 
+type GridProps = Omit<Parameters<typeof import("@/ui/StepGrid").StepGrid>[0], "pos">;
+
+function LiveGrid({ audio, latencyFrames, ...grid }: GridProps & { audio: AudioEngine; latencyFrames: number }) {
+  const pos = usePlayhead(audio.clock, latencyFrames, audio.sampleRate, (stats) => console.log("[studio]", JSON.stringify({ step: "clock", ...stats })));
+  return <StepGrid {...grid} pos={pos} />;
+}
+
+function IdleGrid(grid: GridProps) {
+  const pos = useSharedValue(-1);
+  return <StepGrid {...grid} pos={pos} />;
+}
+
 const s = StyleSheet.create({
-  page: { padding: 16, gap: 12 },
-  h1: { color: "#fff", fontSize: 22, fontWeight: "700" },
-  meta: { color: "rgba(255,255,255,.6)", fontFamily: "monospace" },
-  label: { color: "rgba(255,255,255,.6)", marginTop: 4 },
-  row: { flexDirection: "row", gap: 8 },
-  chip: { minHeight: 44, minWidth: 96, justifyContent: "center", alignItems: "center", paddingHorizontal: 12, borderRadius: 22, borderWidth: 1, borderColor: "rgba(255,255,255,.08)" },
-  chipOn: { borderColor: "#00E5FF" },
-  step: { minHeight: 44, minWidth: 52, justifyContent: "center", alignItems: "center", borderRadius: 22, borderWidth: 1, borderColor: "rgba(255,255,255,.08)" },
-  btn: { minHeight: 56, justifyContent: "center", alignItems: "center", borderRadius: 12, backgroundColor: "rgba(255,255,255,.04)", borderWidth: 1, borderColor: "rgba(255,255,255,.08)" },
-  off: { opacity: 0.4 },
-  text: { color: "#fff", fontSize: 16 },
-  log: { color: "rgba(255,255,255,.85)", fontFamily: "monospace", fontSize: 12 },
+  screen: { flex: 1, backgroundColor: color.ground },
+  page: { paddingHorizontal: space.page, gap: space.gap, width: "100%", maxWidth: 520, alignSelf: "center" }, // phone-sized on desktop web
+  header: { flexDirection: "row", alignItems: "center", gap: space.row },
+  row: { flexDirection: "row", alignItems: "center", gap: 8 },
+  grid: { paddingVertical: 12, paddingHorizontal: 10 },
+  sync: { minHeight: 44, justifyContent: "center", marginTop: -10, marginBottom: -6 },
+  knobs: { flexDirection: "row", gap: space.row },
+  muted: { color: color.muted, marginTop: 4 },
 });

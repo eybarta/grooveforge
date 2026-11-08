@@ -1,7 +1,7 @@
 import { strToU8, zipSync } from "fflate";
 import { useEffect, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text } from "react-native";
-import { renderStudioWav } from "../../reference/poc-audio/engine.ts";
+import { renderStudioWav } from "../../../reference/poc-audio/engine.ts";
 import { onGrid, toPoc } from "@/ab/pocPattern";
 import { createAudioEngine } from "@/audio/engine";
 import { loadKit } from "@/audio/loadKit";

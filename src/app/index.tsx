@@ -5,14 +5,14 @@ import { StyleSheet, Text, View } from "react-native";
 const SPIKE_AUTO = process.env.EXPO_PUBLIC_SPIKE_AUTO;
 
 export default function Index() {
-  if (SPIKE_AUTO) return <Redirect href={{ pathname: "/spike", params: { auto: SPIKE_AUTO } }} />;
+  if (SPIKE_AUTO) return <Redirect href={{ pathname: "/dev/spike", params: { auto: SPIKE_AUTO } }} />;
   return (
     <View style={styles.container}>
       <Text style={styles.title}>GrooveForge 2.0</Text>
       <Link href="/studio" style={styles.link} accessibilityRole="button">
-        Studio sound →
+        Studio →
       </Link>
-      <Link href="/spike" style={styles.link} accessibilityRole="button">
+      <Link href="/dev/spike" style={styles.link} accessibilityRole="button">
         Audio spike →
       </Link>
     </View>
