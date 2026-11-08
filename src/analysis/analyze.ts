@@ -25,15 +25,20 @@ export function analyzeTake(w: GfWasm, samples: Float32Array, sampleRate: number
   const po = ex.gf_alloc(stride * MAX_HITS);
   try {
     const count = Math.min(MAX_HITS, ex.gf_analyze(px, samples.length, sampleRate, pr, po, MAX_HITS) as number);
-    const rows = heap(po, stride * count);
-    return Array.from({ length: count }, (_, i) => ({
-      t: rows[i * stride]!,
-      strength: rows[i * stride + 1]!,
-      features: Array.from(rows.subarray(i * stride + 2, (i + 1) * stride)),
-    }));
+    return hitsFromRows(heap(po, stride * count));
   } finally {
     for (const p of [px, pr, po]) if (p) ex.gf_free(p);
   }
+}
+
+/** Onset rows [time, strength, HIT_FEATURES features] (flattened) → hits: shared by WASM, the web worker and JSI. */
+export function hitsFromRows(rows: ArrayLike<number>): DetectedHit[] {
+  const stride = 2 + HIT_FEATURES;
+  return Array.from({ length: Math.floor(rows.length / stride) }, (_, i) => ({
+    t: rows[i * stride]!,
+    strength: rows[i * stride + 1]!,
+    features: Array.from({ length: HIT_FEATURES }, (_, f) => rows[i * stride + 2 + f]!),
+  }));
 }
 
 /** The reference cut or zero-padded to the take's length. */

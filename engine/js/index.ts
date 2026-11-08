@@ -23,6 +23,8 @@ export interface GfEngine {
   setMix(mix: ArrayBuffer): void;
   /** EBU R128 integrated loudness + true peak of a stereo render at the engine's rate. */
   loudness(left: ArrayBuffer, right: ArrayBuffer): { lufs: number; truePeakDb: number };
+  /** Take analysis (engine/src/Analysis.cpp): onset rows [time s, strength, 18 features], flattened. */
+  analyze(take: ArrayBuffer, reference: ArrayBuffer | null): number[];
   /** Copies decoded audio into a write-once slot. Returns false if the slot is taken or invalid. */
   loadSample(slot: number, left: ArrayBuffer, right: ArrayBuffer | null, sampleRate: number): boolean;
   play(): void;

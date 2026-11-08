@@ -8,6 +8,7 @@
 #include <cstring>
 #include <memory>
 
+#include "gf/Analysis.h"
 #include "gf/Engine.h"
 #include "gf/Loudness.h"
 
@@ -110,6 +111,26 @@ class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
     result.setProperty(runtime, "truePeakDb", m.truePeakDb);
     return result;
   }
+  // analyze(take: ArrayBuffer, reference: ArrayBuffer | null) → number[]: onset rows [time s, strength, features…]
+  // (2 + gf::kHitFeatures each; src/analysis/analyze.ts). Runs here on the JS thread: the UI thread keeps animating.
+  JSI_HOST_FUNCTION_DECL(analyze) {
+    auto take = args[0].asObject(runtime).getArrayBuffer(runtime);
+    const int n = static_cast<int>(take.size(runtime) / sizeof(float));
+    gf::AnalysisOptions options;
+    if (count > 1 && args[1].isObject()) {
+      auto ref = args[1].asObject(runtime).getArrayBuffer(runtime);
+      if (static_cast<int>(ref.size(runtime) / sizeof(float)) >= n) options.reference = reinterpret_cast<const float *>(ref.data(runtime));
+    }
+    const auto a = gf::analyzeTake(reinterpret_cast<const float *>(take.data(runtime)), n, engine_->sampleRate(), options);
+    constexpr int stride = 2 + gf::kHitFeatures;
+    jsi::Array rows(runtime, a.onsets.size() * stride);
+    for (size_t i = 0; i < a.onsets.size(); ++i) {
+      rows.setValueAtIndex(runtime, i * stride, a.onsets[i].time);
+      rows.setValueAtIndex(runtime, i * stride + 1, static_cast<double>(a.onsets[i].strength));
+      for (int f = 0; f < gf::kHitFeatures; ++f) rows.setValueAtIndex(runtime, i * stride + 2 + f, static_cast<double>(a.onsets[i].features[f]));
+    }
+    return rows;
+  }
   // loadSample(slot, left: ArrayBuffer, right: ArrayBuffer | null, sampleRate) → boolean
   JSI_HOST_FUNCTION_DECL(loadSample) {
     auto left = args[1].asObject(runtime).getArrayBuffer(runtime);
@@ -151,6 +172,7 @@ class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, setZones),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, setMix),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, loudness),
+                 JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, analyze),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, loadSample),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, play),
                  JSI_EXPORT_FUNCTION(GfEngineNodeHostObject, stop),

@@ -1,4 +1,5 @@
 import type { Song } from "@/song/types";
+import type { DetectedHit } from "@/analysis/analyze";
 import type { Measured } from "./master";
 
 /** The engine's transport clock, readable every frame from the UI thread (worklets) without touching React state. */
@@ -61,6 +62,11 @@ export interface AudioEngine {
   playBuffer(channels: Float32Array[]): void;
   /** Renders `song` offline through the same engine, kit and program (or `program`): one loop, or `frames`. [L, R]. */
   renderOffline(song: Song, drive: number, frames?: number, program?: EngineProgram): Promise<Float32Array[]>;
+  /**
+   * The engine's take analysis (src/analysis/analyze.ts): hits with their strength and features, off the UI thread
+   * (native: the JS thread; web: a worker). `reference` = what the engine played (output capture), take-aligned.
+   */
+  analyze(take: Float32Array, reference?: Float32Array): Promise<DetectedHit[]>;
   /** EBU R128 integrated loudness + true peak (libebur128 in the engine). */
   loudness(channels: Float32Array[]): Promise<Measured>;
   close(): Promise<void>;

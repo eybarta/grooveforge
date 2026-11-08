@@ -1,4 +1,5 @@
 import { GfEngineNode } from "gf-engine";
+import { hitsFromRows } from "@/analysis/analyze";
 import { Platform } from "react-native";
 import { AudioContext, AudioManager, AudioRecorder, decodeAudioData, OfflineAudioContext } from "react-native-audio-api";
 import { defaultInstruments, songToEngineEvents } from "@/song/time";
@@ -116,6 +117,7 @@ export async function createAudioEngine(): Promise<AudioEngine> {
       return [out.getChannelData(0).slice(), out.getChannelData(1).slice()];
     },
     loudness: async ([l, r = l]) => node.engine.loudness(ab(l!), ab(r!)),
+    analyze: async (take, reference) => hitsFromRows(node.engine.analyze(ab(take), reference ? ab(reference) : null)),
     async close() {
       await recorder.stop();
       await ctx.close();

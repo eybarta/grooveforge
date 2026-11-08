@@ -1,3 +1,4 @@
+import { hitsFromRows } from "@/analysis/analyze";
 import { Asset } from "expo-asset";
 import { defaultInstruments, songToEngineEvents } from "@/song/time";
 import type { Song } from "@/song/types";
@@ -85,6 +86,29 @@ async function wasmTools(bytes: ArrayBuffer): Promise<WasmTools> {
   const { instance } = await WebAssembly.instantiate(bytes.slice(0), imports);
   (instance.exports._initialize as (() => void) | undefined)?.();
   return instance.exports as unknown as WasmTools;
+}
+
+/** One analysis worker for the page (public/gf-analysis-worker.js), started on first use. */
+let worker: { run: (take: Float32Array, reference?: Float32Array) => Promise<Float32Array> } | null = null;
+function analysis() {
+  if (worker) return worker;
+  const w = new Worker("/gf-analysis-worker.js");
+  const pending = new Map<number, { ok: (rows: Float32Array) => void; fail: (e: Error) => void }>();
+  let next = 0;
+  w.onmessage = ({ data }) => {
+    const p = pending.get(data.id);
+    pending.delete(data.id);
+    if (data.error) p?.fail(new Error(data.error));
+    else p?.ok(data.rows);
+  };
+  worker = {
+    run: (take, reference) => new Promise((ok, fail) => {
+      const id = next++;
+      pending.set(id, { ok, fail });
+      w.postMessage({ id, take, reference, sampleRate: SAMPLE_RATE }, [take.buffer, ...(reference ? [reference.buffer] : [])]);
+    }),
+  };
+  return worker;
 }
 
 export async function createAudioEngine(): Promise<AudioEngine> {
@@ -181,6 +205,10 @@ export async function createAudioEngine(): Promise<AudioEngine> {
       await e.call({ type: "play" }); // replies arrive in order, so the engine is ready before rendering starts
       const out = await off.startRendering();
       return [out.getChannelData(0), out.getChannelData(1)];
+    },
+    async analyze(take, reference) {
+      const ref = reference && reference.length >= take.length ? reference.slice(0, take.length) : undefined;
+      return hitsFromRows(await analysis().run(take.slice(), ref));
     },
     async loudness([l, r = l]) {
       tools ??= wasmTools(wasmBytes);
