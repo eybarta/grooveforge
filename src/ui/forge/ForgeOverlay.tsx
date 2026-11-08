@@ -88,54 +88,79 @@ function drawRibbonAndDots(canvas: SkCanvas, t: number, g: ForgeGeom, list: Ribb
   }
 }
 
-/** Record button → progress bar (the film's morph), at the button's place, as wide as the ribbon. */
+/** The orb's conic rim colours (src/ui/Orb.tsx), for the shape it becomes. */
+const RIM = ["#FF2BD6", "#8B5CFF", "#00E5FF", "#C6FF3D", "#FF2BD6"];
+
+/**
+ * The record button waits (dipping on the Stop tap) until the falling orb lands on it at its size; then the two are
+ * one shape that stretches into the progress bar (the film's button → bar morph): the orb's rim colours and dark glass
+ * give way to the bar's track and its magenta → cyan fill. At the button's place, as wide as the ribbon.
+ */
 function drawButton(canvas: SkCanvas, t: number, g: ForgeGeom) {
   "worklet";
   const alpha = 1 - prog(t, FLOW.barFade[0], FLOW.barFade[1]);
   if (alpha <= 0) return;
-  const press = spring(t - FLOW.press, 22, 0.55) - spring(t - (FLOW.press + 0.2 * B), 22, 0.55);
-  const m = spring(t - FLOW.collapse, 10, 0.82);
-  const bw = lerp(REC, g.ribbon.w, m), bh = lerp(REC, 6, m), rr = lerp(REC / 2, 3, m);
+  const landed = t - FLOW.orbFall[1];
   canvas.save();
   canvas.translate(g.button.x, g.button.y);
-  canvas.scale(1 - 0.08 * press, 1 - 0.08 * press);
+  if (landed < 0) { // still the record button, holding the stop square
+    const press = spring(t - FLOW.press, 22, 0.55) - spring(t - (FLOW.press + 0.2 * B), 22, 0.55);
+    canvas.scale(1 - 0.08 * press, 1 - 0.08 * press);
+    const absorbed = prog(t, FLOW.orbFall[1] - 0.12, FLOW.orbFall[1]); // the arriving orb takes it in
+    if (absorbed > 0) canvas.saveLayer(paintOf("#FFFFFF", 1 - absorbed));
+    const box = Skia.RRectXY(Skia.XYWHRect(-REC / 2, -REC / 2, REC, REC), REC / 2, REC / 2);
+    canvas.drawRRect(box, paintOf("#FF2BD6", 0.16));
+    const ring = paintOf("#FF2BD6");
+    ring.setStyle(1);
+    ring.setStrokeWidth(2);
+    canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(-REC / 2 + 1, -REC / 2 + 1, REC - 2, REC - 2), REC / 2, REC / 2), ring);
+    canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(-15, -15, 30, 30), 8, 8), paintOf("#FF2BD6"));
+    if (absorbed > 0) canvas.restore();
+    canvas.restore();
+    return;
+  }
+  const m = spring(landed, 10, 0.82);
+  const bw = lerp(REC, g.ribbon.w, m), bh = lerp(REC, 6, m), rr = lerp(REC / 2, 3, m);
   if (alpha < 1) canvas.saveLayer(paintOf("#FFFFFF", alpha));
   const box = Skia.RRectXY(Skia.XYWHRect(-bw / 2, -bh / 2, bw, bh), rr, rr);
-  const merged = t - FLOW.orbFall[1]; // the orb just poured into the bar: a short flash, decaying at 6/s
-  if (merged >= 0) {
-    const k = Math.exp(-6 * merged);
-    if (k > 0.02) {
-      canvas.drawRRect(box, paintOf("#FF2BD6", 0.8 * k, 22));
-      canvas.drawRRect(box, paintOf("#00E5FF", 0.5 * k, 40));
+  // the orb's halo, plus one flash as it lands (decay 6/s)
+  const halo = 0.5 * (1 - m) + 0.8 * Math.exp(-6 * landed);
+  if (halo > 0.02) {
+    canvas.drawRRect(box, paintOf("#FF2BD6", Math.min(1, halo), 22));
+    canvas.drawRRect(box, paintOf("#00E5FF", Math.min(1, halo) * 0.6, 40));
+  }
+  // the bar's track comes in as the orb's look goes
+  canvas.drawRRect(box, paintOf("#FFFFFF", 0.08 * prog(m, 0.4, 1)));
+  const rimA = 1 - prog(m, 0.5, 1);
+  if (rimA > 0) {
+    const rim = Skia.Paint();
+    rim.setAntiAlias(true);
+    rim.setShader(Skia.Shader.MakeSweepGradient(0, 0, RIM.map((c) => Skia.Color(c)), null, TileMode.Clamp));
+    rim.setAlphaf(rimA);
+    canvas.drawRRect(box, rim);
+    // the dark glass disc and its highlight, draining away as it flattens
+    const glassA = 0.85 * (1 - prog(m, 0, 0.45));
+    if (glassA > 0) {
+      const inset = 0.13 * Math.min(bw, bh);
+      const inner = Skia.RRectXY(Skia.XYWHRect(-bw / 2 + inset, -bh / 2 + inset, bw - 2 * inset, bh - 2 * inset), Math.max(0, rr - inset), Math.max(0, rr - inset));
+      const glass = Skia.Paint();
+      glass.setAntiAlias(true);
+      glass.setShader(Skia.Shader.MakeRadialGradient({ x: -0.17 * bw / 2, y: -0.25 * bh / 2 }, Math.max(bw, bh) * 0.6,
+        [Skia.Color(`rgba(255,255,255,${0.35 * glassA / 0.85})`), Skia.Color(`rgba(7,6,11,${glassA})`)], [0, 0.7], TileMode.Clamp));
+      canvas.drawRRect(inner, glass);
     }
   }
-  const bg = Skia.Paint();
-  bg.setColor(Skia.Color(`rgba(255,${Math.round(lerp(43, 255, m))},${Math.round(lerp(214, 255, m))},${lerp(0.16, 0.08, m)})`));
-  canvas.drawRRect(box, bg);
   canvas.save();
   canvas.clipRRect(box, 1, true);
-  const fill = track(t, [[FLOW.gridIn, 0], [FLOW.beam[0], 1]]) * bw;
-  const fillA = prog(t, FLOW.gridIn, FLOW.gridIn + 0.3 * B);
+  const fill = track(t, [[FLOW.fill, 0], [FLOW.beam[0], 1]]) * bw;
+  const fillA = prog(t, FLOW.fill, FLOW.fill + 0.2);
   if (fill > 0 && fillA > 0) {
     const fp = Skia.Paint();
     fp.setShader(Skia.Shader.MakeLinearGradient({ x: -bw / 2, y: 0 }, { x: -bw / 2 + fill, y: 0 }, [Skia.Color("#FF2BD6"), Skia.Color("#00E5FF")], null, TileMode.Clamp));
     fp.setAlphaf(fillA);
     canvas.drawRect(Skia.XYWHRect(-bw / 2, -bh / 2, fill, bh), fp);
   }
-  const stopA = 1 - prog(m, 0, 0.35);
-  if (stopA > 0) { // the recording dot (Record's stop square)
-    const z = 1 - 0.6 * prog(m, 0, 0.35);
-    const stop = Skia.RRectXY(Skia.XYWHRect(-15 * z, -15 * z, 30 * z, 30 * z), 8 * z, 8 * z);
-    canvas.drawRRect(stop, paintOf("#FF2BD6", stopA));
-  }
   canvas.restore();
-  const border = lerp(2, 0, m);
-  if (border > 0.05) {
-    const bp = paintOf("#FF2BD6");
-    bp.setStyle(1);
-    bp.setStrokeWidth(border);
-    canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(-bw / 2 + border / 2, -bh / 2 + border / 2, bw - border, bh - border), rr, rr), bp);
-  }
   if (alpha < 1) canvas.restore();
   canvas.restore();
 }

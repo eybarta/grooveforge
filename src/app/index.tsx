@@ -33,6 +33,7 @@ import { usePlayhead } from "@/ui/usePlayhead";
 const SPIKE_AUTO = process.env.EXPO_PUBLIC_SPIKE_AUTO;
 const TAKE_BARS = 4; // after a one-bar count-in (P2 makes 2/4/8 a choice)
 const SPRING = { stiffness: 144, damping: 19.2, mass: 1 }; // the film's ω = 12, ζ = 0.8
+const ORB_ON_BUTTON = 96 / 210; // the orb's scale when it lands on the record button
 type El = ComponentRef<typeof View>;
 
 export default function Index() {
@@ -263,13 +264,15 @@ function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceM
     const u = spring(forgeT.value - FLOW.collapse, 14, 0.85);
     return { opacity: Math.max(0, 1 - u), transform: [{ translateY: -24 * u }] };
   });
-  // the orb is pulled into the bar: it accelerates down, shrinks to a point and is gone the moment it arrives
+  // the orb falls onto the record button, shrinking to its size (210 → 96 px); on landing the overlay carries on with
+  // the two as one shape that stretches into the progress bar (src/ui/forge/ForgeOverlay.tsx)
   const sink = useAnimatedStyle(() => {
     if (!forgeT) return { opacity: 1, transform: [{ translateY: 0 }, { scale: 1 }] };
     const u = prog(forgeT.value, FLOW.orbFall[0], FLOW.orbFall[1]);
-    const fall = u * u; // ease-in: it shrinks with the distance, so it reaches the bar as a dot and only then goes
-    return { opacity: 1 - prog(u, 0.92, 1), transform: [{ translateY: orbDy * fall }, { scale: 1 - 0.97 * fall }] };
+    const fall = u * u; // ease-in
+    return { opacity: u >= 1 ? 0 : 1, transform: [{ translateY: orbDy * fall }, { scale: 1 - (1 - ORB_ON_BUTTON) * fall }] };
   });
+  const timerFade = useDerivedValue(() => (forgeT ? 1 - prog(forgeT.value, FLOW.collapse, FLOW.collapse + 0.15) : 1));
   const handedOver = forgeT ? { opacity: 0 } : null;
 
   const label = phase === "countIn" ? "COUNT-IN" : phase === "recording" ? `RECORDING · BAR ${bar} OF ${TAKE_BARS}` : phase === "saving" ? `RECORDING · BAR ${TAKE_BARS} OF ${TAKE_BARS}` : "TAP TO RECORD";
@@ -284,7 +287,7 @@ function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceM
         </Animated.View>
         <View style={s.center}>
           <Animated.View ref={orbEl} style={[{ alignSelf: "stretch" }, sink]} collapsable={false}>
-            <Orb level={level} now={now} sparks={sparks} beat={beat} text={timer} breath={breath} reduceMotion={reduceMotion} />
+            <Orb level={level} now={now} sparks={sparks} beat={beat} text={timer} textOpacity={timerFade} breath={breath} reduceMotion={reduceMotion} />
           </Animated.View>
           <Animated.Text style={[type.caps, s.label, leave]} accessibilityLiveRegion="polite">{label}</Animated.Text>
         </View>
@@ -303,7 +306,11 @@ function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceM
         <Animated.Text style={[type.body, s.hint, leave]}>
           {error ?? (busy ? "Listening… every hit sparks." : "Beatbox the drums, then hum a bassline, in one take.")}
         </Animated.Text>
-        {__DEV__ && !forgeT && <Link href="/dev/spike" style={[type.stat, s.muted, s.devLink]}>dev: audio spike</Link>}
+        {__DEV__ && ( // stays mounted while leaving: removing it shifted the layout under the forge's measurements
+          <Animated.View style={leave}>
+            <Link href="/dev/spike" style={[type.stat, s.muted, s.devLink]}>dev: audio spike</Link>
+          </Animated.View>
+        )}
       </Shell>
     </View>
   );

@@ -8,8 +8,14 @@ export const FLOW = {
   press: 0,
   /** Ribbon bars collapse, the button stretches into the progress bar, the orb sinks into it, Record's chrome leaves. */
   collapse: 0.5 * B,
-  /** The orb falls into the progress bar: accelerating, no spring (a spring's slow tail left it hovering, Eyal). */
+  /**
+   * The orb falls onto the record button: accelerating, no spring (a spring's slow tail left it hovering, Eyal),
+   * shrinking to the button's size. On landing the two become one and stretch into the progress bar (the film's
+   * button → bar morph), the orb's colours settling into the bar's fill (Eyal: mutate into it, don't fade out).
+   */
   orbFall: [0.5 * B, 0.5 * B + 0.5] as const,
+  /** The progress fill runs from just after the bar forms to the beam. */
+  fill: 0.5 * B + 0.75,
   /** The Studio grid panel rises in where the orb was. */
   gridIn: 1 * B,
   /** First dot leaves; the last leaves `flightSpan` later (play order), each landing 0.5 s after it leaves. */

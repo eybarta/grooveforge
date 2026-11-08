@@ -52,8 +52,9 @@ half4 main(float2 p) {
  * The Record orb, all on the UI thread: shader + count-in rings + sparks + timer in one canvas. `beat` is the
  * count-in position in beats (0–4, else −1); `text` the timer; `breath` 0–1 scales the orb a few percent.
  */
-export function Orb({ level, now, sparks, beat, text, breath, reduceMotion, height = 380 }: {
+export function Orb({ level, now, sparks, beat, text, textOpacity, breath, reduceMotion, height = 380 }: {
   level: SharedValue<number>; now: SharedValue<number>; sparks: SharedValue<Spark[]>; beat: SharedValue<number>;
+  textOpacity?: SharedValue<number>;
   text: SharedValue<string>; breath: SharedValue<number>; reduceMotion: boolean; height?: number;
 }) {
   const [w, setW] = useState(0);
@@ -116,7 +117,7 @@ export function Orb({ level, now, sparks, beat, text, breath, reduceMotion, heig
             <Shader source={ORB} uniforms={uniforms} />
           </Fill>
           <Picture picture={overlay} />
-          {font && <Text x={textX} y={cy + 6} text={text} font={font} color="#F4F1FF" />}
+          {font && <Text x={textX} y={cy + 6} text={text} font={font} color="#F4F1FF" opacity={textOpacity ?? 1} />}
         </Canvas>
       )}
     </View>
