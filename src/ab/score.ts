@@ -19,6 +19,17 @@ export interface Score {
   perDevice: Record<Device, { listeners: number; preferV2: number }>;
 }
 
+/** The answer key's pairs (.ab/key.json, written with the page's audio): which version is behind file x and file y. */
+export type KeyPairs = Record<string, { label: string; x: "v2" | "poc"; y: "v2" | "poc" }>;
+
+/** Pair id → the file ("x" | "y") that is v2. */
+export function v2Files(pairs: KeyPairs): Record<string, "x" | "y"> {
+  return Object.fromEntries(Object.entries(pairs).map(([id, { x, y }]) => {
+    if ((x === "v2") === (y === "v2")) throw new Error(`answer key ${id}: x = ${x}, y = ${y}; exactly one should be v2`);
+    return [id, x === "v2" ? "x" : "y"];
+  }));
+}
+
 /** Finds every result code in pasted text (chat dumps welcome). `v2File` maps pair id → the file ("x" | "y") that is v2. */
 export function score(text: string, pairIds: readonly string[], v2File: Record<string, "x" | "y">): Score {
   const perPair = Object.fromEntries(pairIds.map((id) => [id, 0]));

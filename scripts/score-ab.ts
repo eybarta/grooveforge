@@ -2,11 +2,11 @@
 // Scores the blind A/B: paste the listeners' messages into .ab/codes.txt (git-ignored), then `npm run ab:score`.
 // The answer key (.ab/key.json) comes from the /ab page's build and stays out of git: the repo is public.
 import { readFileSync } from "node:fs";
-import { DEVICES, GATE, score } from "../src/ab/score.ts";
+import { DEVICES, GATE, score, v2Files, type KeyPairs } from "../src/ab/score.ts";
 
-const key = JSON.parse(readFileSync(".ab/key.json", "utf8")) as { pairs: Record<string, { label: string; v2: "x" | "y" }> };
+const key = JSON.parse(readFileSync(".ab/key.json", "utf8")) as { pairs: KeyPairs };
 const ids = Object.keys(key.pairs).sort();
-const s = score(readFileSync(".ab/codes.txt", "utf8"), ids, Object.fromEntries(ids.map((id) => [id, key.pairs[id]!.v2])));
+const s = score(readFileSync(".ab/codes.txt", "utf8"), ids, v2Files(key.pairs));
 const pct = (a: number, b: number) => (b ? `${Math.round((100 * a) / b)} %` : "–");
 
 console.log(`Listeners: ${s.listeners} (gate needs ${GATE.listeners})`);

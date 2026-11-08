@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { score } from "./score";
+import { score, v2Files } from "./score";
 
 const IDS = ["p1", "p2", "p3", "p4", "p5", "p6"];
 const V2 = { p1: "y", p2: "y", p3: "y", p4: "x", p5: "x", p6: "y" } as const; // a made-up key
 
 describe("A/B scoring", () => {
+  it("reads which file is v2 from the answer key as the page's build writes it", () => {
+    // the key's "v2" / "poc" entries are each version's loudness match, not a file name (the bug that scored 0 %)
+    const loud = { lufs: -18.4, truePeakDb: -10, gainDb: -9, sourceLufs: -9, sourceTruePeakDb: -1 };
+    const key = { p1: { label: "a", x: "poc", y: "v2", v2: loud, poc: loud }, p2: { label: "b", x: "v2", y: "poc", v2: loud, poc: loud } } as const;
+    expect(v2Files(key)).toEqual({ p1: "y", p2: "x" });
+    expect(() => v2Files({ p1: { label: "a", x: "v2", y: "v2" } })).toThrow(/exactly one/);
+  });
+
   it("counts v2 picks per listener, pair and device, and finds codes inside pasted chat text", () => {
     const s = score("Dana: GF1.h.yyyxxy\nomer -> GF1.s.yyyyxx (took 5 min)\nGF1.p.xxxyyx", IDS, V2);
     expect(s.listeners).toBe(3);
