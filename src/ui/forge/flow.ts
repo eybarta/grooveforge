@@ -8,6 +8,8 @@ export const FLOW = {
   press: 0,
   /** Ribbon bars collapse, the button stretches into the progress bar, the orb sinks into it, Record's chrome leaves. */
   collapse: 0.5 * B,
+  /** The orb falls into the progress bar: accelerating, no spring (a spring's slow tail left it hovering, Eyal). */
+  orbFall: [0.5 * B, 0.5 * B + 0.5] as const,
   /** The Studio grid panel rises in where the orb was. */
   gridIn: 1 * B,
   /** First dot leaves; the last leaves `flightSpan` later (play order), each landing 0.5 s after it leaves. */

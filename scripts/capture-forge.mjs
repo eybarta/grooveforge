@@ -6,6 +6,7 @@
 //   node scripts/capture-forge.mjs video   → out/forge/forge.mp4 (60 fps, 2×) + out/forge/side-by-side.mp4
 // The app's continuous flow (Record → Forge → Studio) starts at the film's Stop tap, beat 2:
 //   URL="http://localhost:8081/?forge=demo&t=0" SPEC_OFFSET=1.0714 node scripts/capture-forge.mjs video
+// UNTIL=1.6 SLOW=4 renders just the first 1.6 s, 4× slower (out/forge/forge.mp4).
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -50,10 +51,11 @@ try {
       console.log(f.slice(0, -4), "SSIM", (log.match(/All:([\d.]+)/) ?? [])[1] ?? "?");
     }
   } else {
-    const duration = await evaluate("FILM.duration");
+    const duration = Number(process.env.UNTIL ?? (await evaluate("FILM.duration"))); // UNTIL=1.6: just the start
     const n = Math.round(duration * 60);
     for (let i = 0; i < n; i++) await frameAt(i / 60, join(OUT, "frames", `${String(i).padStart(4, "0")}.png`));
-    execFileSync("ffmpeg", ["-y", "-hide_banner", "-loglevel", "error", "-framerate", "60", "-i", join(OUT, "frames/%04d.png"), "-pix_fmt", "yuv420p", join(OUT, "forge.mp4")]);
+    const fps = String(60 / Number(process.env.SLOW ?? 1)); // SLOW=4: slow motion for reviewing a detail
+    execFileSync("ffmpeg", ["-y", "-hide_banner", "-loglevel", "error", "-framerate", fps, "-i", join(OUT, "frames/%04d.png"), "-pix_fmt", "yuv420p", join(OUT, "forge.mp4")]);
     execFileSync("ffmpeg", ["-y", "-hide_banner", "-loglevel", "error", "-ss", SPEC_OFFSET, "-i", "docs/motion/forge-transition.mp4", "-i", join(OUT, "forge.mp4"),
       "-filter_complex", "[0:v]scale=780:1688[a];[1:v]scale=780:1688[b];[a][b]hstack", "-pix_fmt", "yuv420p", join(OUT, "side-by-side.mp4")]);
     console.log(`${n} frames → ${OUT}/side-by-side.mp4 (left: spec, right: app)`);

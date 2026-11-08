@@ -101,6 +101,14 @@ function drawButton(canvas: SkCanvas, t: number, g: ForgeGeom) {
   canvas.scale(1 - 0.08 * press, 1 - 0.08 * press);
   if (alpha < 1) canvas.saveLayer(paintOf("#FFFFFF", alpha));
   const box = Skia.RRectXY(Skia.XYWHRect(-bw / 2, -bh / 2, bw, bh), rr, rr);
+  const merged = t - FLOW.orbFall[1]; // the orb just poured into the bar: a short flash, decaying at 6/s
+  if (merged >= 0) {
+    const k = Math.exp(-6 * merged);
+    if (k > 0.02) {
+      canvas.drawRRect(box, paintOf("#FF2BD6", 0.8 * k, 22));
+      canvas.drawRRect(box, paintOf("#00E5FF", 0.5 * k, 40));
+    }
+  }
   const bg = Skia.Paint();
   bg.setColor(Skia.Color(`rgba(255,${Math.round(lerp(43, 255, m))},${Math.round(lerp(214, 255, m))},${lerp(0.16, 0.08, m)})`));
   canvas.drawRRect(box, bg);

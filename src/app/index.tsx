@@ -180,7 +180,13 @@ function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceM
   const [bar, setBar] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const orbEl = useRef<El>(null);
-  const [orbDy, setOrbDy] = useState(0); // orb centre → record button centre, for sinking into it
+  const [orbDy, setOrbDy] = useState(0); // orb centre → record button centre, for falling into it
+  const leaving = forgeT !== null;
+  useEffect(() => { // measured as the forge starts (the orb starts falling a beat later)
+    if (!leaving || !orbEl.current || !buttonEl.current) return;
+    const o = orbEl.current.getBoundingClientRect(), b = buttonEl.current.getBoundingClientRect();
+    setOrbDy(b.y + b.height / 2 - (o.y + o.height / 2));
+  }, [leaving, buttonEl]);
 
   const sr = audio.sampleRate;
   const bpm = DEMOS[mood]().bpm;
@@ -199,10 +205,6 @@ function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceM
     const { input } = await audio.captureStop();
     await audio.stop();
     if (!take) return;
-    if (orbEl.current && buttonEl.current) {
-      const o = orbEl.current.getBoundingClientRect(), b = buttonEl.current.getBoundingClientRect();
-      setOrbDy(b.y + b.height / 2 - (o.y + o.height / 2));
-    }
     onTake({ input, sampleRate: sr, bpm, mood, countInFrames: barFrames }, mood);
   };
   const begin = async () => {
@@ -261,10 +263,12 @@ function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceM
     const u = spring(forgeT.value - FLOW.collapse, 14, 0.85);
     return { opacity: Math.max(0, 1 - u), transform: [{ translateY: -24 * u }] };
   });
+  // the orb is pulled into the bar: it accelerates down, shrinks to a point and is gone the moment it arrives
   const sink = useAnimatedStyle(() => {
     if (!forgeT) return { opacity: 1, transform: [{ translateY: 0 }, { scale: 1 }] };
-    const m = spring(forgeT.value - FLOW.collapse, 10, 0.82);
-    return { opacity: 1 - prog(m, 0.55, 1), transform: [{ translateY: orbDy * m }, { scale: 1 - 0.8 * m }] };
+    const u = prog(forgeT.value, FLOW.orbFall[0], FLOW.orbFall[1]);
+    const fall = u * u; // ease-in: it shrinks with the distance, so it reaches the bar as a dot and only then goes
+    return { opacity: 1 - prog(u, 0.92, 1), transform: [{ translateY: orbDy * fall }, { scale: 1 - 0.97 * fall }] };
   });
   const handedOver = forgeT ? { opacity: 0 } : null;
 
