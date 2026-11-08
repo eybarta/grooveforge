@@ -3,6 +3,7 @@ import { JetBrainsMono_500Medium } from "@expo-google-fonts/jetbrains-mono/500Me
 import { useState } from "react";
 import { View } from "react-native";
 import { type SharedValue, useDerivedValue } from "react-native-reanimated";
+import { advance } from "./skiaText";
 import { LANES_UI } from "./theme";
 import type { Spark } from "./useMicVisuals";
 
@@ -105,8 +106,7 @@ export function Orb({ level, now, sparks, beat, text, breath, reduceMotion, heig
     }
   }));
 
-  // centred by advance widths (measureText gives ink bounds)
-  const textX = useDerivedValue(() => (font ? cx - font.getGlyphWidths(font.getGlyphIDs(text.value)).reduce((a, b) => a + b, 0) / 2 : 0));
+  const textX = useDerivedValue(() => (font ? cx - advance(font, text.value) / 2 : 0));
 
   return (
     <View style={{ height, alignSelf: "stretch" }} onLayout={(e) => setW(e.nativeEvent.layout.width)} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">

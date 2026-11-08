@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { View } from "react-native";
 import { type SharedValue, useDerivedValue } from "react-native-reanimated";
 import { clamp, easeInOut, lerp, prog, spring, track } from "../motion";
+import { advance } from "../skiaText";
 import { BW, cellX, cellY, COLW, FRAME, type ForgeScene, ROWH, WY } from "./scene";
 
 const LANE = ["#FF2BD6", "#00E5FF", "#C6FF3D"];
@@ -69,12 +70,6 @@ function lineHeight(font: SkFont) {
   "worklet";
   const m = font.getMetrics();
   return m.descent - m.ascent + (m.leading ?? 0);
-}
-
-/** Advance widths (measureText gives ink bounds: a space would measure 0). */
-function advance(font: SkFont, text: string) {
-  "worklet";
-  return font.getGlyphWidths(font.getGlyphIDs(text)).reduce((a, b) => a + b, 0);
 }
 
 /** CSS letter-spacing: Skia text has none, so glyphs go one by one at their advances. Returns the width. */
