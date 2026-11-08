@@ -1,4 +1,7 @@
 // C ABI over gf::Engine for the web build (standalone WASM, loaded by public/gf-engine-worklet.js).
+#include <algorithm>
+
+#include "gf/Analysis.h"
 #include "gf/Engine.h"
 #include "gf/Loudness.h"
 
@@ -23,6 +26,21 @@ void gf_loudness(const float* l, const float* r, int frames, float sampleRate, f
   const auto m = gf::measureLoudness(l, r, frames, sampleRate);
   out[0] = static_cast<float>(m.lufs);
   out[1] = static_cast<float>(m.truePeakDb);
+}
+/**
+ * Analyses a mono take (src/analysis/analyze.ts). ref: what the engine played on the take's timeline, or null.
+ * Writes onset rows [time s, strength] into out (at most maxRows); returns how many onsets there are.
+ */
+int gf_analyze(const float* x, int n, float sampleRate, const float* ref, float* out, int maxRows) {
+  gf::AnalysisOptions o;
+  o.reference = ref;
+  const auto a = gf::analyzeTake(x, n, sampleRate, o);
+  const int count = static_cast<int>(a.onsets.size());
+  for (int i = 0; i < std::min(count, maxRows); ++i) {
+    out[2 * i] = static_cast<float>(a.onsets[i].time);
+    out[2 * i + 1] = a.onsets[i].strength;
+  }
+  return count;
 }
 int gf_load_sample(gf::Engine* e, int slot, const float* l, const float* r, int frames, float sampleRate) {
   return e->loadSample(slot, l, r, frames, sampleRate) ? 1 : 0;

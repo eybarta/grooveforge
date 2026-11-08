@@ -72,6 +72,9 @@ function makeTake(seed: number) {
       const jitter = (rand() + rand() + rand() - 1.5) * 0.012; // human feel, ~±12 ms
       const t = lead + b * beat + jitter;
       const v = voices[cls](), start = Math.round(t * SR), g = vel * (0.85 + 0.3 * rand());
+      // a mouth doesn't stop dead: fade the last 5 ms (cutting a sound off mid-decay is a click, i.e. a fake hit)
+      const tail = Math.round(0.005 * SR);
+      for (let i = 0; i < tail; i++) v[v.length - 1 - i]! *= i / tail;
       for (let i = 0; i < v.length && start + i < out.length; i++) out[start + i]! += v[i]! * g;
       hits.push({ t: +(t.toFixed(4)), class: cls });
     }
