@@ -42,3 +42,6 @@ npm-debug.*
 
 # Skia web: CanvasKit (7.7 MB) is copied from node_modules by `npm install` (postinstall: setup-skia-web public)
 public/canvaskit.wasm
+
+# capture output (scripts/capture-forge.sh)
+out/

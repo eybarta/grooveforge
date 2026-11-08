@@ -105,7 +105,8 @@ export function Orb({ level, now, sparks, beat, text, breath, reduceMotion, heig
     }
   }));
 
-  const textX = useDerivedValue(() => (font ? cx - font.measureText(text.value).width / 2 : 0));
+  // centred by advance widths (measureText gives ink bounds)
+  const textX = useDerivedValue(() => (font ? cx - font.getGlyphWidths(font.getGlyphIDs(text.value)).reduce((a, b) => a + b, 0) / 2 : 0));
 
   return (
     <View style={{ height, alignSelf: "stretch" }} onLayout={(e) => setW(e.nativeEvent.layout.width)} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">

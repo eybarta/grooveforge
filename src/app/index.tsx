@@ -97,7 +97,7 @@ function Recorder({ audio }: { audio: AudioEngine }) {
     setTake({ input, sampleRate: sr, bpm, mood, countInFrames: barFrames });
     setSong(DEMOS[mood]()); // P2 forges the take into the song; until then the mood's demo groove
     setPhase("idle");
-    router.push("/studio");
+    router.push("/forge");
   };
   const start = async () => {
     setError(null);
