@@ -31,7 +31,11 @@ CI runs the third column on every push (`src/audio/export.wasm.test.ts`).
 
 ## The blind A/B
 
-- **Page:** https://claude.ai/artifact/2QHmQdTSyc847rsqrW3Qy9 (private: share it from its Share menu, by public link).
+- **Page:** https://grooveforge-listening-test.netlify.app (Netlify, Eyal's account: no login or claude.ai loader in
+  front of it, which signed-out listeners got stuck on). The same page is also at
+  https://claude.ai/artifact/2QHmQdTSyc847rsqrW3Qy9. Redeploy after editing `docs/p1-ab/listening-test.html`: wrap it
+  in a full HTML document next to `.ab/audio/*.wav` (never `key.json`) and `netlify deploy --prod --site
+  81d29251-6129-40cb-88fd-dda6f6b8d5b8`.
 - **Material:** the two demo grooves, each as full beat, drums only, and kick + 808 (6 pairs). They play through the
   POC (its own default mix, its own export) and through v2 (default knobs, Loud master).
 - **Fair:** both versions in a pair have the same 16th-grid pattern (1/32 rolls are dropped because the POC can't
