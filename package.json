@@ -1,8 +1,12 @@
 {
   "name": "grooveforge",
   "version": "2.0.0",
-  "main": "expo-router/entry",
+  "main": "index",
   "dependencies": {
+    "@expo-google-fonts/figtree": "^0.4.1",
+    "@expo-google-fonts/jetbrains-mono": "^0.4.1",
+    "@expo-google-fonts/unbounded": "^0.4.1",
+    "@shopify/react-native-skia": "2.14.0",
     "expo": "~58.0.23",
     "expo-asset": "~58.0.20",
     "expo-constants": "~58.0.15",
@@ -44,6 +48,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
+    "postinstall": "setup-skia-web public",
     "test": "vitest run",
     "build:wasm": "./scripts/build-wasm.sh",
     "test:engine": "cmake -S engine -B engine/build && cmake --build engine/build && ctest --test-dir engine/build --output-on-failure",
