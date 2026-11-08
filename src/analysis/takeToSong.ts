@@ -18,10 +18,14 @@ export interface TakeInfo {
   countInSec: number;
 }
 
-/** Without a kit: a crude guess by brightness (log₂ spectral centroid, feature 13), always marked unsure. */
+/**
+ * Without a kit: a crude guess by log₁₀(energy < 300 Hz / > 3 kHz) (feature 17), always marked unsure. On the golden
+ * takes kicks are 0.1…1.3, snares −1.9…−1.5, hats down to −6 (brightness, feature 13, overlaps across all three).
+ * shortcut: synthetic takes only; re-fit on the real golden takes, or replace with the bundled default kit (P2 plan).
+ */
 function guess(features: number[]): DrumLane {
-  const centroid = features[13]!;
-  return centroid < 9.2 ? "kick" : centroid > 12.2 ? "hatClosed" : "snare";
+  const lowHigh = features[17]!;
+  return lowHigh > 0 ? "kick" : lowHigh < -3.5 ? "hatClosed" : "snare";
 }
 
 /** Off-beat 16ths' median position inside their 8th (0.5 = straight), from hits snapped to the straight grid. */

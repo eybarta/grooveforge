@@ -8,6 +8,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { takeFileName } from "@/analysis/audacity";
+import { songFromTake } from "@/analysis/forgeTake";
 import { useKit } from "@/analysis/kit";
 import { useCalibration } from "@/audio/calibration";
 import type { Mood } from "@/audio/kit";
@@ -36,6 +37,7 @@ import { usePlayhead } from "@/ui/usePlayhead";
 // dev hook: `EXPO_PUBLIC_SPIKE_AUTO=render npx expo start` opens the spike and runs the offline render headlessly
 const SPIKE_AUTO = process.env.EXPO_PUBLIC_SPIKE_AUTO;
 const TAKE_BARS = 4; // after a one-bar count-in (P2 makes 2/4/8 a choice)
+const HOLD = FLOW.flight - 0.05; // the forge waits here for the take's analysis if it isn't done yet
 const SPRING = { stiffness: 144, damping: 19.2, mass: 1 }; // the film's ω = 12, ζ = 0.8
 type El = ComponentRef<typeof View>;
 
@@ -63,12 +65,20 @@ function Session() {
   const [geom, setGeom] = useState<ForgeGeom | null>(null);
   const ribbon = useSharedValue<RibbonBar[]>([]);
   const forgeT = useSharedValue(0), start = useSharedValue(-1), forging = useSharedValue(false);
+  const heardAt = useSharedValue(Infinity); // forge time the take's song was ready (its dots exist from then)
 
-  // the forge's clock (seconds since Stop), from the first forge frame
+  // the forge's clock (seconds since Stop), from the first forge frame; it holds before the first dot flies until the
+  // take has been heard (the analysis normally takes well under that ~1 s)
   useFrameCallback((f) => {
     if (!forging.value || frozen) return;
     if (start.value < 0) start.value = f.timestamp;
-    forgeT.value = (f.timestamp - start.value) / 1000;
+    const t = (f.timestamp - start.value) / 1000;
+    if (heardAt.value === Infinity && t > HOLD) {
+      start.value = f.timestamp - HOLD * 1000;
+      forgeT.value = HOLD;
+      return;
+    }
+    forgeT.value = t;
   });
   useAnimatedReaction(() => forging.value && !frozen && forgeT.value >= FLOW.end, (done, was) => {
     if (done && !was) scheduleOnRN(setPhase, "studio");
@@ -77,7 +87,7 @@ function Session() {
     if (phase === "studio") forging.set(false);
   }, [phase, forging]);
 
-  // the forge lands the song's first bar (P2: the take's detected hits)
+  // the forge lands the song's first bar: the take's detected hits (none until it has been heard)
   const cells = barCells(song, 0, STUDIO_LANES);
   const dots: Dot[] = cells.flatMap((row, r) => row.flatMap((v, step) => (v > 0 ? [{ row: r, step, color: LANES_UI[STUDIO_LANES[r]!].color, shape: LANES_UI[STUDIO_LANES[r]!].shape }] : [])));
   const land = cells.map((row, r) => row.map((_, step) => leaves(step, r) + FLOW.landAfter));
@@ -99,8 +109,32 @@ function Session() {
   };
   const onTake = (take: Take | null, mood: Mood) => {
     setTake(take);
-    setSong(DEMOS[mood]()); // P2 forges the take into the song; until then the mood's demo groove
+    if (!take) { // dev: a made-up take forges the demo groove
+      setSong(DEMOS[mood]());
+      heardAt.set(0);
+      startForge();
+      return;
+    }
+    heardAt.set(Infinity);
+    setSong({ ...DEMOS[mood](), id: "take-pending", tracks: [] }); // nothing lands until the take has been heard
     startForge();
+    setTimeout(() => void hear(take), 50); // after the forge's first frames: native analysis keeps the JS thread busy
+  };
+  const hear = async (take: Take) => {
+    try {
+      const { song: heard, analysis, analysedMs } = await songFromTake(audio!, take, useKit.getState().templates, useCalibration.getState().rtlMs);
+      setSong(heard);
+      const notes = Object.fromEntries(heard.tracks.map((t) => [t.kind, t.notes.length]));
+      console.log("[take]", JSON.stringify({
+        step: "heard", platform: audio!.platform, msSinceStop: Math.round(performance.now() - take.stoppedAt), analysedMs: Math.round(analysedMs),
+        seconds: Math.round((take.input.length / take.sampleRate) * 10) / 10, hits: analysis.hits.length, notes, bars: heard.bars, swing: Math.round(heard.swing * 100) / 100,
+      }));
+    } catch (e) {
+      console.warn("[take]", JSON.stringify({ step: "analysis failed", error: String(e) }));
+      setSong(DEMOS[take.mood]()); // the take stays in useTake (dev: save it); the Studio opens on the demo
+    } finally {
+      heardAt.set(forgeT.get());
+    }
   };
 
   // the grid's place once Studio has laid out; its panel starts 24 px low (the rise), so take that off
@@ -115,6 +149,17 @@ function Session() {
       clearInterval(id);
     }, 30);
     return () => clearInterval(id);
+  });
+
+  // dev: forge any audio as a take, no mic (web console / remote checks): __gfForgeTake(samples, bpm, mood), the
+  // samples starting with the one-bar count-in, the click already out
+  useEffect(() => {
+    if (!__DEV__ || !audio) return;
+    Object.assign(globalThis, {
+      __gfForgeTake: (input: Float32Array, bpm: number, mood: Mood) => onTake({
+        input, output: new Float32Array(input.length), stoppedAt: performance.now(), sampleRate: audio.sampleRate, bpm, mood, countInFrames: (240 / bpm) * audio.sampleRate,
+      }, mood),
+    });
   });
 
   // dev: a made-up take straight into the forge (no mic), for screenshots and the side-by-side
@@ -141,7 +186,7 @@ function Session() {
         ? <RecordView audio={audio} ribbon={ribbon} forgeT={phase === "forge" ? forgeT : null} ribbonEl={ribbonEl} buttonEl={buttonEl}
             onTake={onTake} reduceMotion={reduceMotion} geom={geom} />
         : <Shell>{error && <Text style={[type.body, s.error]}>{error}</Text>}</Shell>)}
-      {phase === "forge" && geom && <ForgeOverlay t={forgeT} geom={geom} ribbon={ribbon} dots={dots} />}
+      {phase === "forge" && geom && <ForgeOverlay t={forgeT} geom={geom} ribbon={ribbon} dots={dots} heardAt={heardAt} />}
       {phase === "forge" && <ForgingLabel t={forgeT} />}
     </View>
   );
@@ -240,10 +285,11 @@ function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceM
     const take = lastBar.get() >= 1; // stopping during the count-in throws the take away
     rec.set(false);
     setPhase(take ? "saving" : "idle");
-    const { input } = await audio.captureStop();
+    const stoppedAt = performance.now();
+    const { input, output } = await audio.captureStop();
     await audio.stop();
     if (!take) return;
-    onTake({ input, sampleRate: sr, bpm, mood, countInFrames: barFrames }, mood);
+    onTake({ input, output, stoppedAt, sampleRate: sr, bpm, mood, countInFrames: barFrames }, mood);
   };
   const begin = async () => {
     setError(null);

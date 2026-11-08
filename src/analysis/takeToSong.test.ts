@@ -50,8 +50,9 @@ describe("take → song", () => {
     notes.forEach((n, k) => expect(Math.abs(noteTimeSec(n, raw) - (roll[k]! - countIn))).toBeLessThan(0.0005));
   });
 
-  it("without a kit, guesses by brightness and marks every hit unsure", () => {
-    const song = takeToSong([{ t: at(0, 0.5), strength: 1, features: f(0, 8) }, { t: at(2, 0.5), strength: 1, features: f(0, 13) }], null, { bpm, bars: 2, mood: "trap", countInSec: countIn });
-    expect(song.tracks[0]!.notes.map((n) => [n.lane, n.confidence])).toEqual([["kick", 0], ["hatClosed", 0]]);
+  it("without a kit, guesses by low vs high energy and marks every hit unsure", () => {
+    const lowHigh = (v: number) => { const x = f(0); x[17] = v; return x; };
+    const song = takeToSong([0.8, -1.6, -5].map((v, k) => ({ t: at(2 * k, 0.5), strength: 1, features: lowHigh(v) })), null, { bpm, bars: 2, mood: "trap", countInSec: countIn });
+    expect(song.tracks[0]!.notes.map((n) => [n.lane, n.confidence])).toEqual([["kick", 0], ["snare", 0], ["hatClosed", 0]]);
   });
 });

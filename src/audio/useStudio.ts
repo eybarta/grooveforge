@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { boomBapDemo, trapDemo } from "@/song/demoGrooves";
 import { useSong } from "@/song/store";
 import { defaultInstruments } from "@/song/time";
+import { useTake } from "./take";
 import type { Song } from "@/song/types";
 import { useCalibration } from "./calibration";
 import type { Mood } from "./kit";
@@ -38,6 +39,7 @@ export function useStudio(audio: AudioEngine | null) {
   const [busy, setBusy] = useState<"export" | "calibrate" | null>(null);
   const gainDb = useRef(0);
   const tuning = useRef(0);
+  const timed = useRef(""); // the take song whose record → ready time was logged
 
   const log = (step: string, data: object) => console.log("[studio]", JSON.stringify({ step, platform: audio?.platform, ...data }));
 
@@ -63,11 +65,18 @@ export function useStudio(audio: AudioEngine | null) {
     (async () => {
       await ready.setSong(song);
       await ready.setProgram(studioProgram(song, knobs, gainDb.current));
+      // a forged take: record → ready (playable, at the last gain) and → mastered (at its own gain), from Stop
+      const take = song.id.startsWith("take-") && timed.current !== song.id ? useTake.getState().take : null;
+      if (take) console.log("[studio]", JSON.stringify({ step: "take ready", platform: ready.platform, ms: Math.round(performance.now() - take.stoppedAt) }));
       const r = await masterSong(ready, song, knobs, target, liveLoops(song));
       if (id !== tuning.current) return;
       gainDb.current = r.gainDb;
       await ready.setProgram(studioProgram(song, knobs, r.gainDb));
       console.log("[studio]", JSON.stringify({ step: "loudness", mood: song.mood, target, lufs: r2(r.lufs), gainDb: r2(r.gainDb) }));
+      if (take) {
+        timed.current = song.id;
+        console.log("[studio]", JSON.stringify({ step: "take mastered", platform: ready.platform, ms: Math.round(performance.now() - take.stoppedAt) }));
+      }
     })().catch((e) => setStatus(`Mix update failed: ${e}`));
   }, [ready, song, knobs, target]);
 
@@ -115,7 +124,7 @@ export function useStudio(audio: AudioEngine | null) {
 
   return {
     audio: ready, status, song, knobs, target, playing, busy,
-    setMood: (m: Mood) => setSong(DEMOS[m]()),
+    setMood: (m: Mood) => setSong(song.id.startsWith("take-") ? { ...song, mood: m } : DEMOS[m]()), // a take keeps its notes
     editSong: setSong,
     setKnob: (k: keyof Knobs, v: number) => setKnobs((prev) => ({ ...prev, [k]: v })),
     setTarget, toggle, exportWav, runCalibration,

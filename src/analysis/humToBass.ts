@@ -14,6 +14,11 @@ export interface HumNote { start: number; end: number; midi: number; slid: boole
 const MIN_NOTE = 0.06; // s: shorter voiced bits are breaths and drum-sound residue
 const STEADY = 0.07; // s: a pitch held this long is a note; shorter = moving between notes (or a drum's wobble)
 const RESIDUE = 0.15; // s: a shorter "note" starting at a drum hit is that drum's own tone (a kick's thump, a click's ring)
+// A kick's ringing tail (an 808-ish thump settles at ~55 Hz and can ring 0.4 s) is lower than people hum (C2, 65 Hz,
+// is about the floor): a "note" below that starting within TAIL of a drum hit is the drum's, however long it rings
+// (any hit: it needn't have been classified a kick)
+const LOWEST_HUM = 35.5, TAIL = 0.3;
+const BRIDGE = 0.1; // s: a gap this short with a drum hit in it is the drum cutting through one hummed note
 // s: a note starting this soon after a kick started with it (the kick masks the hum's first ~100 ms). Capped at a 16th:
 // masking only ever delays, so a note meant for the next 16th is heard at least a 16th after the kick.
 const SNAP = 0.12;
@@ -33,8 +38,20 @@ export function humNotes(f0: ArrayLike<number>, hop: number, drums?: HumDrums): 
   const notes = segment(f0, hop);
   if (!drums) return notes;
   const snap = Math.min(SNAP, drums.sixteenth ?? Infinity);
-  return notes
-    .filter((n) => n.end - n.start >= RESIDUE || !drums.hits.some((t) => n.start - t >= -0.03 && n.start - t <= 0.1))
+  const near = (times: number[], at: number, before: number, after: number) => times.some((t) => at - t >= -before && at - t <= after);
+  const kept = notes.filter((n) => {
+    const len = n.end - n.start;
+    if (len < RESIDUE && near(drums.hits, n.start, 0.03, 0.1)) return false;
+    return !(n.midi < LOWEST_HUM && near(drums.hits, n.start, 0.03, TAIL));
+  });
+  const joined: HumNote[] = [];
+  for (const n of kept) {
+    const prev = joined[joined.length - 1];
+    const cut = prev && n.start - prev.end < BRIDGE && Math.abs(n.midi - prev.midi) < 0.5 && drums.hits.some((t) => t >= prev.end - 0.03 && t <= n.start + 0.03);
+    if (cut) prev.end = n.end;
+    else joined.push({ ...n });
+  }
+  return joined
     .map((n) => {
       const kick = n.slid ? undefined : drums.kicks.filter((t) => t <= n.start + 0.03 && n.start - t <= snap).pop();
       return kick === undefined ? n : { ...n, start: kick };

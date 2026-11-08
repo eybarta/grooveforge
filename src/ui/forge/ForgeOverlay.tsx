@@ -21,10 +21,12 @@ const REC = 96, DOT = 11;
  * Studio grid cells (the grid then shows each cell as its dot lands); the record button waits for the orb, which
  * becomes the progress bar (src/ui/Orb.tsx). It starts pixel-identical to Record's ribbon and button, which hide.
  */
-export function ForgeOverlay({ t, geom, ribbon, dots }: { t: SharedValue<number>; geom: ForgeGeom; ribbon: SharedValue<RibbonBar[]>; dots: Dot[] }) {
+export function ForgeOverlay({ t, geom, ribbon, dots, heardAt }: {
+  t: SharedValue<number>; geom: ForgeGeom; ribbon: SharedValue<RibbonBar[]>; dots: Dot[]; heardAt: SharedValue<number>;
+}) {
   const picture = useDerivedValue(() => createPicture((canvas) => {
     const now = t.value;
-    drawRibbonAndDots(canvas, now, geom, ribbon.value, dots);
+    drawRibbonAndDots(canvas, now, geom, ribbon.value, dots, heardAt.value);
     drawButton(canvas, now, geom);
   }));
   return (
@@ -34,8 +36,10 @@ export function ForgeOverlay({ t, geom, ribbon, dots }: { t: SharedValue<number>
   );
 }
 
-function drawRibbonAndDots(canvas: SkCanvas, t: number, g: ForgeGeom, list: RibbonBar[], dots: Dot[]) {
+/** `heard` = when the take's dots exist: before the bars collapse, the bars become them; later, they pop in where their bars were. */
+function drawRibbonAndDots(canvas: SkCanvas, t: number, g: ForgeGeom, list: RibbonBar[], dots: Dot[], heard: number) {
   "worklet";
+  const pop = heard <= FLOW.collapse ? 1 : clamp(spring(t - heard, 14, 0.8));
   for (let i = 0; i < RIBBON_BARS; i++) {
     const bar = ribbonBar(i, g.ribbon.w, list);
     const x = g.ribbon.x + bar.x, cy = g.ribbon.y + RIBBON_H / 2;
@@ -56,8 +60,8 @@ function drawRibbonAndDots(canvas: SkCanvas, t: number, g: ForgeGeom, list: Ribb
       const px = lerp(x + bar.w / 2, g.grid.x + cell.x + cell.w / 2, f);
       const py = lerp(cy, g.grid.y + cell.y + cell.h / 2, f) - 80 * Math.sin(Math.PI * clamp(f));
       const land = prog(f, 0.72, 1);
-      const w = lerp(lerp(bar.w, DOT, col), cell.w, easeInOut(land));
-      const h = lerp(lerp(bar.h, DOT, col), cell.h, easeInOut(land));
+      const w = lerp(lerp(bar.w, DOT, col) * pop, cell.w, easeInOut(land));
+      const h = lerp(lerp(bar.h, DOT, col) * pop, cell.h, easeInOut(land));
       const round = d.shape === "circle" || d.shape === "note" ? w / 2 : 2;
       const rad = lerp(lerp(3, round, col), 5, land);
       const rot = lerp(d.shape === "diamond" ? 45 * col : 0, 0, land);

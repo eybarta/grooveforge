@@ -93,6 +93,10 @@ export function summarize(est: LagEstimate, sampleRate: number, minScore = MIN_C
 /** CLAUDE.md: recorded takes are shifted by the measured round trip before analysis. */
 export const alignTake = (input: Float32Array, rtlFrames: number) => input.subarray(Math.max(0, Math.round(rtlFrames)));
 
+/** The round trip to shift a take by (s): measured if this route is calibrated, else what the OS reports (short). */
+export const takeShiftSec = (reported: Record<string, number>, rtlMs: number | null) =>
+  rtlMs !== null && Number.isFinite(rtlMs) ? rtlMs / 1000 : (reported.outputLatency || 0) + (reported.inputLatency || 0);
+
 export interface OutputLatency {
   frames: number;
   /** false: no calibration yet, so this is the OS/browser figure (CLAUDE.md: 30–48 ms short on Bluetooth and web). */

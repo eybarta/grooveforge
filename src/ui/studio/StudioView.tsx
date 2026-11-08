@@ -48,7 +48,7 @@ export function StudioView({ st, forge, gridRef, footer }: {
       contentContainerStyle={[s.page, { paddingTop: insets.top + space.pageTop, paddingBottom: insets.bottom + space.pageBottom }]}>
       <Rise forge={forge} at={FLOW.chrome[0]} style={s.header}>
         <View style={{ flex: 1 }}>
-          <Text style={[type.title, { color: color.text }]}>{song.mood === "trap" ? "Trap demo" : "Boom Bap demo"}</Text>
+          <Text style={[type.title, { color: color.text }]}>{song.id.startsWith("take-") ? "Your beat" : song.mood === "trap" ? "Trap demo" : "Boom Bap demo"}</Text>
           <Text style={[type.stat, s.muted]}>
             {song.bpm} BPM · swing {pct(song.swing)}% · {LOUDNESS_TARGETS[st.target]} LUFS
           </Text>

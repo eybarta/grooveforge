@@ -7,7 +7,7 @@ import { scheduleOnRN } from "react-native-worklets";
 import { takeFileName } from "@/analysis/audacity";
 import { TEACH_CLASSES, TEACH_EACH, templatesFromTeach, useKit } from "@/analysis/kit";
 import { useCalibration } from "@/audio/calibration";
-import { alignTake, outputLatency } from "@/audio/latency";
+import { alignTake, outputLatency, takeShiftSec } from "@/audio/latency";
 import { saveWav } from "@/audio/saveWav";
 import type { AudioEngine } from "@/audio/types";
 import { useEngine } from "@/audio/useEngine";
@@ -58,10 +58,7 @@ function Teacher({ audio }: { audio: AudioEngine }) {
     setPhase("analysing");
     const { input, output } = await audio.captureStop();
     await audio.stop();
-    // the take as heard: shifted by the round trip (measured if calibrated, else what the OS says)
-    const r = audio.reportedLatency();
-    const rtl = rtlMs !== null && Number.isFinite(rtlMs) ? rtlMs / 1000 : (r.outputLatency || 0) + (r.inputLatency || 0);
-    const aligned = alignTake(input, rtl * sr);
+    const aligned = alignTake(input, takeShiftSec(audio.reportedLatency(), rtlMs) * sr); // the take as heard
     const { hits } = await audio.analyze(aligned, output.subarray(0, aligned.length));
     const { templates, missing } = templatesFromTeach(hits, (COUNT_IN * beatFrames) / sr, beatFrames / sr);
     setTake(aligned);

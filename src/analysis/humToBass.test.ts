@@ -37,6 +37,13 @@ describe("hum → notes", () => {
     expect(humNotes(f0, hop, { ...drums, sixteenth: 0.05 })[0]!.start).toBeCloseTo(0.69, 1); // beyond a 16th: its own step
   });
 
+  it("drops a boomy kick's low tail and joins a note a snare cut through", () => {
+    // kick at 0.1 s ringing down to ~55 Hz (33) for 0.45 s; a hummed C3 from 0.7 s, cut by a snare at 1.1 s for 60 ms
+    const f0 = track([[0.1, 0], [0.05, [42, 34]], [0.4, 33.1], [0.15, 0], [0.4, 48], [0.06, 0], [0.4, 48], [0.1, 0]]);
+    const notes = humNotes(f0, hop, { hits: [0.1, 1.1], kicks: [0.1], sixteenth: 60 / 90 / 4 });
+    expect(notes.map((n) => [Math.round(n.midi), +n.start.toFixed(1), +n.end.toFixed(1)])).toEqual([[48, 0.7, 1.6]]);
+  });
+
   it("finds the key and snaps into it", () => {
     const n = (midi: number, d = 0.5) => ({ start: 0, end: d, midi, slid: false });
     expect(detectKey([n(45, 1), n(48), n(50), n(52), n(55), n(45)])).toEqual(expect.objectContaining({ root: 9, mode: "minor" }));
