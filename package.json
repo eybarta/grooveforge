@@ -49,7 +49,8 @@
     "test:engine": "cmake -S engine -B engine/build && cmake --build engine/build && ctest --test-dir engine/build --output-on-failure",
     "golden:make": "node --no-warnings scripts/make-synthetic-takes.ts",
     "golden:update": "GOLDEN_UPDATE=1 vitest run golden",
-    "kit:build": "node --no-warnings scripts/build-kit.ts"
+    "kit:build": "node --no-warnings scripts/build-kit.ts",
+    "ab:score": "node --no-warnings scripts/score-ab.ts"
   },
   "private": true
 }
