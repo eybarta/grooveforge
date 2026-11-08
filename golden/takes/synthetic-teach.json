@@ -4,6 +4,7 @@
   "device": "make-synthetic-takes.ts",
   "kind": "teach",
   "bpm": 100,
+  "countInSec": 0.5,
   "hits": [
     {
       "t": 0.4946,

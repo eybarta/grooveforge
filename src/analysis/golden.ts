@@ -59,6 +59,11 @@ export interface HitScore {
  * against whichever came first in time.
  */
 export function scoreHits(ref: LabelledHit[], est: LabelledHit[], toleranceSec = 0.03): HitScore {
+  return matchHits(ref, est, toleranceSec).score;
+}
+
+/** scoreHits' matching, with the matched (label, detection) pairs. */
+export function matchHits<T extends LabelledHit>(ref: LabelledHit[], est: T[], toleranceSec = 0.03) {
   const r = [...ref].sort((a, b) => a.t - b.t);
   const e = [...est].sort((a, b) => a.t - b.t);
   const near = (a: LabelledHit, b: LabelledHit) => Math.abs(a.t - b.t) <= toleranceSec + 1e-9; // 1 ns: 0.07 − 0.04 > 0.03 in floating point
@@ -92,9 +97,11 @@ export function scoreHits(ref: LabelledHit[], est: LabelledHit[], toleranceSec =
       }
     }
   }
-  const tp = pairOf.filter((p) => p >= 0).length;
-  const classCorrect = pairOf.filter((p, k) => p >= 0 && e[k]!.class === r[p]!.class).length;
-  return { tp, fp: e.length - tp, fn: r.length - tp, classCorrect };
+  const pairs = pairOf.flatMap((p, k) => (p >= 0 ? [[r[p]!, e[k]!] as const] : []));
+  const tp = pairs.length;
+  const classCorrect = pairs.filter(([x, y]) => x.class === y.class).length;
+  const score: HitScore = { tp, fp: e.length - tp, fn: r.length - tp, classCorrect };
+  return { score, pairs };
 }
 
 export function summarizeScore(s: HitScore) {

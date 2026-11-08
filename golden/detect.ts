@@ -42,6 +42,6 @@ export function goldenKits(): Map<string, Kit> {
   return kits;
 }
 
-export function detect(samples: Float32Array, sampleRate: number, kit: Kit): LabelledHit[] {
-  return findHits(samples, sampleRate).map((h) => ({ t: h.t, class: classify(h.features, kit).cls }));
-}
+export const classifyHits = (hits: DetectedHit[], kit: Kit): LabelledHit[] => hits.map((h) => ({ t: h.t, class: classify(h.features, kit).cls }));
+
+export const detect = (samples: Float32Array, sampleRate: number, kit: Kit) => classifyHits(findHits(samples, sampleRate), kit);

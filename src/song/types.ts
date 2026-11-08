@@ -19,6 +19,8 @@ export interface NoteEvent {
   durationTicks?: number;
   /** 808 slide: the MIDI pitch this note glides in from (a hummed slide becomes this in Phase 2). */
   glideFrom?: number;
+  /** Detected hits: how sure the classifier was of the lane (0–1); low = the amber "?" in the Studio. */
+  confidence?: number;
 }
 
 export interface Track {

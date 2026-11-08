@@ -18,6 +18,7 @@ export function cellRect(row: number, step: number, w: number) {
 /** Forge mode: a lit cell shows only once its dot has landed (seconds on `t`), flashing as it lands. */
 export interface Reveal { t: SharedValue<number>; land: number[][] }
 const SHORT: Record<GridLane, string> = { kick: "KK", snare: "SN", hatClosed: "HH", hatOpen: "OH", perc: "PC", bass: "BS" };
+const AMBER = "#FFB020"; // the unsure mark (docs/design/3-studio); no pulse: idle UI stays quiet (CLAUDE.md)
 
 /**
  * One bar of the song as a step grid. Everything that moves (the beam, each hit flashing as the beam passes it,
@@ -25,8 +26,8 @@ const SHORT: Record<GridLane, string> = { kick: "KK", snare: "SN", hatClosed: "H
  * `pos` (0–1 through the loop, −1 stopped): a pure function of (cells, t). Taps and screen readers use a static
  * layer of real buttons on top, ≥ 44 px tall (16 steps can't be 44 px wide on a phone).
  */
-export function StepGrid({ lanes, cells, bar, bars, loopSeconds, pos, reduceMotion, onToggle, reveal, canvasRef }: {
-  lanes: readonly GridLane[]; cells: number[][]; bar: number; bars: number; loopSeconds: number;
+export function StepGrid({ lanes, cells, unsure, bar, bars, loopSeconds, pos, reduceMotion, onToggle, reveal, canvasRef }: {
+  lanes: readonly GridLane[]; cells: number[][]; unsure?: boolean[][]; bar: number; bars: number; loopSeconds: number;
   pos: SharedValue<number>; reduceMotion: boolean; onToggle: (row: number, step: number) => void;
   reveal?: Reveal; canvasRef?: Ref<ComponentRef<typeof View>>;
 }) {
@@ -59,12 +60,13 @@ export function StepGrid({ lanes, cells, bar, bars, loopSeconds, pos, reduceMoti
           flash = Math.exp(-motion.flashDecay * ((((p - at) % 1) + 1) % 1) * loopSeconds);
         }
         if (reveal && !reduceMotion) flash = Math.max(flash, Math.exp(-motion.flashDecay * (rt - land))); // landing
+        const tint = unsure?.[r]![s] ? AMBER : colors[r]!;
         if (flash > 0.02) {
-          glow.setColor(Skia.Color(colors[r]!));
+          glow.setColor(Skia.Color(tint));
           glow.setAlphaf(flash);
           canvas.drawRRect(rect, glow);
         }
-        paint.setColor(Skia.Color(colors[r]!));
+        paint.setColor(Skia.Color(tint));
         paint.setAlphaf(0.55 + 0.45 * v);
         canvas.drawRRect(rect, paint);
         if (flash > 0.02) {
@@ -105,10 +107,15 @@ export function StepGrid({ lanes, cells, bar, bars, loopSeconds, pos, reduceMoti
         <View style={StyleSheet.absoluteFill}>
           {lanes.map((l, r) => (
             <View key={l} style={[s.row, r > 0 && { marginTop: ROW_GAP }]}>
-              {cells[r]!.map((v, step) => (
-                <Pressable key={step} style={s.hit} onPress={() => onToggle(r, step)} accessibilityRole="button"
-                  accessibilityLabel={`${LANES_UI[l].name} step ${step + 1}`} accessibilityState={{ selected: v > 0 }} />
-              ))}
+              {cells[r]!.map((v, step) => {
+                const q = v > 0 && !!unsure?.[r]![step];
+                return (
+                  <Pressable key={step} style={s.hit} onPress={() => onToggle(r, step)} accessibilityRole="button"
+                    accessibilityLabel={`${LANES_UI[l].name} step ${step + 1}${q ? ", unsure" : ""}`} accessibilityState={{ selected: v > 0 }}>
+                    {q && <Text style={s.mark}>?</Text>}
+                  </Pressable>
+                );
+              })}
             </View>
           ))}
         </View>
@@ -122,5 +129,6 @@ const s = StyleSheet.create({
   labels: { width: LABEL_W, justifyContent: "space-between" },
   label: { height: TOUCH, lineHeight: TOUCH, fontSize: 11 },
   row: { flexDirection: "row", height: TOUCH },
-  hit: { flex: 1, height: TOUCH },
+  hit: { flex: 1, height: TOUCH, alignItems: "center", justifyContent: "center" },
+  mark: { color: color.ground, fontFamily: "Figtree_600SemiBold", fontSize: 11 },
 });

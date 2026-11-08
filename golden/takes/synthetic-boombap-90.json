@@ -3,6 +3,7 @@
   "performer": "synthetic",
   "device": "make-synthetic-takes.ts",
   "bpm": 90,
+  "countInSec": 0.5,
   "hits": [
     {
       "t": 0.5046,

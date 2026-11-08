@@ -8,16 +8,31 @@ const BAR_TICKS = STEP_TICKS * STEPS_PER_BAR;
 /** Loudest velocity starting inside each 16th of `bar`, per lane (0 = empty). Off-grid hits (1/32 rolls) count too. */
 export function barCells(song: Song, bar: number, lanes: readonly Lane[]): number[][] {
   const cells = lanes.map(() => new Array<number>(STEPS_PER_BAR).fill(0));
+  eachCell(song, bar, lanes, (n, row, step) => (cells[row]![step] = Math.max(cells[row]![step]!, n.velocity)));
+  return cells;
+}
+
+/** Below this a detected hit's lane is a guess: the Studio marks it with the amber "?" (docs/design/3-studio). */
+export const UNSURE = 0.3;
+
+/** Per cell of the bar: does it hold a detected hit the classifier wasn't sure of? */
+export function barUnsure(song: Song, bar: number, lanes: readonly Lane[]): boolean[][] {
+  const out = lanes.map(() => new Array<boolean>(STEPS_PER_BAR).fill(false));
+  eachCell(song, bar, lanes, (n, row, step) => {
+    if (n.confidence !== undefined && n.confidence < UNSURE) out[row]![step] = true;
+  });
+  return out;
+}
+
+function eachCell(song: Song, bar: number, lanes: readonly Lane[], fn: (n: NoteEvent, row: number, step: number) => void) {
   for (const t of song.tracks) {
     if (t.muted) continue;
     for (const n of t.notes) {
       const row = lanes.indexOf(n.lane);
       const step = Math.floor((n.tick - bar * BAR_TICKS) / STEP_TICKS);
-      if (row < 0 || step < 0 || step >= STEPS_PER_BAR) continue;
-      cells[row]![step] = Math.max(cells[row]![step]!, n.velocity);
+      if (row >= 0 && step >= 0 && step < STEPS_PER_BAR) fn(n, row, step);
     }
   }
-  return cells;
 }
 
 const inStep = (n: NoteEvent, lane: Lane, from: number) => n.lane === lane && n.tick >= from && n.tick < from + STEP_TICKS;

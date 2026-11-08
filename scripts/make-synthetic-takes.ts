@@ -87,12 +87,12 @@ function makeTake(seed: number) {
       return { start: +s.toFixed(4), end: +e.toFixed(4), midi };
     });
     hits.sort((a, b) => a.t - b.t);
-    return { samples: out, hits, hum: humLabels };
+    return { samples: out, hits, hum: humLabels, countInSec: lead };
   };
 }
 
 function write(name: string, bpm: number, take: ReturnType<ReturnType<typeof makeTake>>, kind?: "teach") {
-  const labels: TakeLabels = { version: 1, performer: "synthetic", device: "make-synthetic-takes.ts", ...(kind ? { kind } : {}), bpm, hits: take.hits, hum: take.hum };
+  const labels: TakeLabels = { version: 1, performer: "synthetic", device: "make-synthetic-takes.ts", ...(kind ? { kind } : {}), bpm, countInSec: take.countInSec, hits: take.hits, hum: take.hum };
   writeFileSync(new URL(`${name}.wav`, OUT), encodeWav(take.samples, SR, "16"));
   writeFileSync(new URL(`${name}.json`, OUT), JSON.stringify(labels, null, 2) + "\n");
   console.log(`${name}: ${take.hits.length} hits, ${take.hum.length} hum segments, ${(take.samples.length / SR).toFixed(2)} s`);

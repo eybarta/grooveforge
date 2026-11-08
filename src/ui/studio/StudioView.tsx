@@ -7,7 +7,7 @@ import { outputLatency } from "@/audio/latency";
 import { LOUDNESS_TARGETS } from "@/audio/master";
 import type { AudioEngine } from "@/audio/types";
 import type { useStudio } from "@/audio/useStudio";
-import { barCells, toggleStep } from "@/song/grid";
+import { barCells, barUnsure, toggleStep } from "@/song/grid";
 import { loopSeconds } from "@/song/time";
 import { Button, Chip, Glass, PlayButton } from "../controls";
 import { FLOW } from "../forge/flow";
@@ -39,7 +39,7 @@ export function StudioView({ st, forge, gridRef, footer }: {
   const shownBar = forge ? 0 : Math.min(bar, song.bars - 1);
   const latency = st.audio ? outputLatency(st.audio.reportedLatency(), rtlMs, st.audio.sampleRate) : null;
   const grid = {
-    lanes: STUDIO_LANES, cells: barCells(song, shownBar, STUDIO_LANES), bar: shownBar, bars: song.bars, loopSeconds: loopSeconds(song),
+    lanes: STUDIO_LANES, cells: barCells(song, shownBar, STUDIO_LANES), unsure: barUnsure(song, shownBar, STUDIO_LANES), bar: shownBar, bars: song.bars, loopSeconds: loopSeconds(song),
     reduceMotion, canvasRef: gridRef, onToggle: (row: number, step: number) => st.editSong(toggleStep(song, STUDIO_LANES[row]!, shownBar, step)),
   };
 
@@ -71,6 +71,9 @@ export function StudioView({ st, forge, gridRef, footer }: {
             : st.audio && latency ? <LiveGrid audio={st.audio} latencyFrames={latency.frames} {...grid} />
               : <IdleGrid {...grid} />}
         </Glass>
+        {grid.unsure.some((row) => row.some(Boolean)) && (
+          <Text style={[type.stat, s.muted]}>Amber <Text style={{ color: "#FFB020" }}>?</Text> = not sure what you played. Tap to fix.</Text>
+        )}
       </Rise>
 
       <Rise forge={forge} at={FLOW.chrome[2]} style={{ gap: space.gap }}>
@@ -83,7 +86,7 @@ export function StudioView({ st, forge, gridRef, footer }: {
           </Text>
         </Pressable>
         <View style={s.knobs}>
-          <Knob label="Quantize" value={0} onChange={() => {}} accent={color.cyan} format={() => "–"} disabled />
+          <Knob label="Quantize" value={song.quantize} accent={color.cyan} onChange={(v) => st.editSong({ ...song, quantize: v })} format={pct} />
           <Knob label="Swing" value={(song.swing - SWING_MIN) / SWING_RANGE} accent={color.magenta}
             onChange={(v) => st.editSong({ ...song, swing: SWING_MIN + v * SWING_RANGE })} format={(v) => pct(SWING_MIN + v * SWING_RANGE)} />
           <Knob label="Humanize" value={0} onChange={() => {}} accent={color.lime} format={() => "–"} disabled />
