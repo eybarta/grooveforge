@@ -53,7 +53,7 @@ export function StudioView({ st, forge, gridRef, footer }: {
             {song.bpm} BPM · swing {pct(song.swing)}% · {LOUDNESS_TARGETS[st.target]} LUFS
           </Text>
         </View>
-        <PlayButton playing={st.playing} onPress={st.toggle} disabled={!st.audio || st.busy === "calibrate"} />
+        <PlayButton playing={st.playing || st.mouth} onPress={st.toggle} disabled={!st.audio || st.busy === "calibrate"} />
       </Rise>
 
       <Rise forge={forge} at={FLOW.chrome[1]} style={s.row}>
@@ -101,7 +101,8 @@ export function StudioView({ st, forge, gridRef, footer }: {
 
       <Rise forge={forge} at={FLOW.chrome[3]} style={s.row}>
         <View style={{ flex: 1 }}>
-          <Button label="Your mouth ⇄ Studio" onPress={() => {}} disabled accessibilityLabel="Compare with your recording (after you record a take)" />
+          <Button label={st.mouth ? "Back to Studio" : "Your mouth ⇄ Studio"} onPress={st.compare} disabled={!st.audio || !st.canCompare || st.busy !== null}
+            accessibilityLabel={!st.canCompare ? "Compare with your recording (after you record a take)" : st.mouth ? "Playing your recording. Switch to the Studio" : "Hear your recording instead"} />
         </View>
         <Button label={st.busy === "export" ? "Mastering…" : "Export"} variant="primary" onPress={st.exportWav}
           disabled={!st.audio || st.busy !== null} accessibilityLabel="Export WAV, 8 bars" />

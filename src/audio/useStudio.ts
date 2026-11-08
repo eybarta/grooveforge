@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { boomBapDemo, trapDemo } from "@/song/demoGrooves";
 import { useSong } from "@/song/store";
 import { defaultInstruments } from "@/song/time";
+import { takeLoop } from "@/analysis/forgeTake";
 import { useTake } from "./take";
 import type { Song } from "@/song/types";
 import { useCalibration } from "./calibration";
@@ -36,6 +37,9 @@ export function useStudio(audio: AudioEngine | null) {
   const [knobs, setKnobs] = useState<Knobs>(DEFAULT_KNOBS);
   const [target, setTarget] = useState<LoudnessTarget>("loud");
   const [playing, setPlaying] = useState(false);
+  const [mouth, setMouth] = useState(false); // "Your mouth": the take itself is playing, looped
+  const take = useTake((t) => t.take);
+  const rtlMs = useCalibration((c) => c.rtlMs);
   const [busy, setBusy] = useState<"export" | "calibrate" | null>(null);
   const gainDb = useRef(0);
   const tuning = useRef(0);
@@ -82,9 +86,26 @@ export function useStudio(audio: AudioEngine | null) {
 
   const toggle = async () => {
     if (!ready) return;
-    if (playing) await ready.stop();
+    if (playing || mouth) await ready.stop(); // stop() also cuts the take
     else await ready.start();
-    setPlaying(!playing);
+    setPlaying(!playing && !mouth);
+    setMouth(false);
+  };
+
+  /** "Your mouth ⇄ Studio": swaps between the take as recorded (looped) and the Studio's render of it. */
+  const canCompare = !!take && song.id.startsWith("take-");
+  const compare = async () => {
+    if (!ready || !take || !canCompare) return;
+    await ready.stop();
+    if (mouth) {
+      await ready.start();
+      setMouth(false);
+      setPlaying(true);
+      return;
+    }
+    ready.playBuffer([takeLoop(take, song, ready.reportedLatency(), rtlMs)], true);
+    setMouth(true);
+    setPlaying(false);
   };
 
   const exportWav = async () => {
@@ -123,7 +144,7 @@ export function useStudio(audio: AudioEngine | null) {
   };
 
   return {
-    audio: ready, status, song, knobs, target, playing, busy,
+    audio: ready, status, song, knobs, target, playing, mouth, busy, canCompare, compare,
     setMood: (m: Mood) => setSong(song.id.startsWith("take-") ? { ...song, mood: m } : DEMOS[m]()), // a take keeps its notes
     editSong: setSong,
     setKnob: (k: keyof Knobs, v: number) => setKnobs((prev) => ({ ...prev, [k]: v })),

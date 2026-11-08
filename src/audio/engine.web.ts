@@ -184,11 +184,12 @@ export async function createAudioEngine(): Promise<AudioEngine> {
       };
     },
     route: async () => ({ inputs: mic ? mic.getAudioTracks().map((t) => t.label) : [], outputs: [] }),
-    playBuffer(channels) {
+    playBuffer(channels, loop = false) {
       const b = ctx.createBuffer(channels.length, channels[0]!.length, ctx.sampleRate);
       channels.forEach((c, i) => b.getChannelData(i).set(c));
       const src = ctx.createBufferSource();
       src.buffer = b;
+      src.loop = loop;
       src.connect(ctx.destination);
       src.start();
       playback = src;

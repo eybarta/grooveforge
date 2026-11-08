@@ -1,10 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Take } from "@/audio/take";
-import { loopBars, songFromTake } from "./forgeTake";
+import { loopBars, songFromTake, takeLoop } from "./forgeTake";
 
 describe("take → song in the app", () => {
   it("loops the most whole bars recorded, as 2, 4 or 8", () => {
     expect([0.4, 1.95, 3.2, 3.95, 4, 7.5, 9].map(loopBars)).toEqual([2, 2, 2, 4, 4, 4, 8]);
+  });
+
+  it("plays back the looped bars of the take, shifted and peaked at −1 dBFS", () => {
+    const sr = 48000, bar = 2 * sr;
+    const input = new Float32Array(5 * bar + 4800);
+    input[4800 + bar] = 0.25; // bar 1's first sample once shifted by the 100 ms round trip
+    const take: Take = { input, output: new Float32Array(input.length), sampleRate: sr, bpm: 120, mood: "trap", countInFrames: bar, stoppedAt: 0 };
+    const loop = takeLoop(take, { bars: 2 }, {}, 100);
+    expect(loop.length).toBe(2 * bar);
+    expect(loop[0]).toBeCloseTo(0.891, 3);
   });
 
   it("shifts the take by the measured round trip and gives the engine the click it played", async () => {

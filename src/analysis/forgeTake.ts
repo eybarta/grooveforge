@@ -12,6 +12,20 @@ export function loopBars(recordedBars: number): Song["bars"] {
 }
 
 /**
+ * The stretch of the take its song loops (bar 1 on, `song.bars` bars), shifted by the round trip like the analysis,
+ * peaked at −1 dBFS: what "Your mouth" plays against the Studio.
+ */
+export function takeLoop(take: Take, song: Pick<Song, "bars">, reported: Record<string, number>, rtlMs: number | null): Float32Array {
+  const sr = take.sampleRate;
+  const input = alignTake(take.input, takeShiftSec(reported, rtlMs) * sr);
+  const loop = input.slice(take.countInFrames, take.countInFrames + Math.round(song.bars * ((4 * 60 * sr) / take.bpm)));
+  let peak = 0;
+  for (const v of loop) peak = Math.max(peak, Math.abs(v));
+  if (peak > 0) for (let i = 0; i < loop.length; i++) loop[i]! *= 0.891 / peak;
+  return loop;
+}
+
+/**
  * A recorded take → its song (BUILD_PLAN P2): shifted by the round trip, analysed by the engine off the UI thread
  * (native: the JS thread; web: a worker) with the click subtracted, then hits → drums and hum → 808 with the user's
  * taught kit (none yet: lanes guessed, all marked unsure).

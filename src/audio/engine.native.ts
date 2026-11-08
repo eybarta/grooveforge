@@ -94,11 +94,12 @@ export async function createAudioEngine(): Promise<AudioEngine> {
       const names = (list: { name: string; category: string }[]) => list.map((x) => `${x.name} (${x.category})`);
       return { inputs: names(d.currentInputs), outputs: names(d.currentOutputs) };
     },
-    playBuffer(channels) {
+    playBuffer(channels, loop = false) {
       const b = ctx.createBuffer(channels.length, channels[0]!.length, ctx.sampleRate);
       channels.forEach((c, i) => b.getChannelData(i).set(c));
       const src = ctx.createBufferSource();
       src.buffer = b;
+      src.loop = loop;
       src.connect(ctx.destination);
       src.start();
       playback = src;

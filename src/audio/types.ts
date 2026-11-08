@@ -58,8 +58,8 @@ export interface AudioEngine {
   reportedLatency(): Record<string, number>;
   /** The ports actually in use (iOS reports the current route; web only knows the mic label). */
   route(): Promise<{ inputs: string[]; outputs: string[] }>;
-  /** Plays samples once through the live context, one array per channel (for listening back to takes). */
-  playBuffer(channels: Float32Array[]): void;
+  /** Plays samples through the live context, one array per channel, once or looped (listening back to takes); stop() cuts it. */
+  playBuffer(channels: Float32Array[], loop?: boolean): void;
   /** Renders `song` offline through the same engine, kit and program (or `program`): one loop, or `frames`. [L, R]. */
   renderOffline(song: Song, drive: number, frames?: number, program?: EngineProgram): Promise<Float32Array[]>;
   /**
