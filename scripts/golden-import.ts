@@ -1,6 +1,7 @@
 /// <reference types="node" />
 // Turns a labelled take into a golden take: the WAV + Audacity's exported labels → golden/takes/<name>.{wav,json}.
-//   npm run golden:import -- <take.wav> <labels.txt> [--performer eyal] [--device "iPhone 16 Pro, built-in mic"] [--name boombap-01]
+//   npm run golden:import -- <take.wav> <labels.txt> [--performer eyal] [--device "iPhone 16 Pro, built-in mic"] [--name boombap-01] [--teach]
+// A "teach me your kit" take (saved from the teach screen, or --teach) becomes that performer's kit.
 // Tempo and count-in come from the app's file name (take-<mood>-<bpm>bpm-ci<seconds>s-<route>-<stamp>.wav).
 import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
 import { basename } from "node:path";
@@ -11,7 +12,7 @@ import { decodeWav } from "../src/audio/wav.ts";
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
-  options: { performer: { type: "string", default: "eyal" }, device: { type: "string" }, name: { type: "string" } },
+  options: { performer: { type: "string", default: "eyal" }, device: { type: "string" }, name: { type: "string" }, teach: { type: "boolean", default: false } },
 });
 const [wav, labelsPath] = positionals;
 if (!wav?.endsWith(".wav") || !labelsPath) {
@@ -28,6 +29,7 @@ const labels: TakeLabels = {
   version: 1,
   performer: values.performer!,
   device: values.device ?? meta?.route ?? "unknown",
+  ...(values.teach || meta?.mood === "teach" ? { kind: "teach" as const } : {}),
   ...(meta ? { bpm: meta.bpm, countInSec: meta.countInSec } : {}),
   hits,
   hum,

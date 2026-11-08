@@ -1,4 +1,4 @@
-import { Link, Redirect, Stack, useLocalSearchParams } from "expo-router";
+import { Link, Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { type ComponentRef, type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
@@ -8,6 +8,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { takeFileName } from "@/analysis/audacity";
+import { useKit } from "@/analysis/kit";
 import { useCalibration } from "@/audio/calibration";
 import type { Mood } from "@/audio/kit";
 import { alignTake, outputLatency } from "@/audio/latency";
@@ -210,6 +211,8 @@ function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceM
   geom: ForgeGeom | null;
 }) {
   const rtlMs = useCalibration((c) => c.rtlMs);
+  const router = useRouter();
+  const taught = useKit((k) => k.templates !== null);
   const [mood, setMood] = useState<Mood>("boomBap");
   const [phase, setPhase] = useState<"idle" | "countIn" | "recording" | "saving">("idle");
   const [bar, setBar] = useState(0);
@@ -312,6 +315,9 @@ function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceM
           <Chip label="Boom Bap" selected={mood === "boomBap"} onPress={() => setMood("boomBap")} disabled={busy} />
           <Chip label="Trap" selected={mood === "trap"} onPress={() => setMood("trap")} disabled={busy} />
           <Text style={[type.stat, s.muted]}>Click {bpm} BPM</Text>
+          <View style={{ flex: 1 }} />
+          <Chip label={taught ? "Kit taught ✓" : "Teach me your kit"} selected={false} onPress={() => router.push("/teach")}
+            disabled={busy} accent={color.lime} />
         </Animated.View>
         <View style={s.center}>
           <View ref={orbEl} style={s.orbSlot} onLayout={measureOrb} collapsable={false} />
