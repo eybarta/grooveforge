@@ -2,18 +2,8 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { decodeWav } from "@/audio/wav";
-import {
-  addScores, parseTakeLabels, scoreHits, summarizeScore, type HitScore, type LabelledHit,
-} from "@/analysis/golden";
-import { analyzeChannel } from "../reference/poc-audio/analyze.ts";
-
-// The detector under test. P0 = the POC heuristics (reference/, never app code); Phase 2 swaps in the real one.
-function detect(samples: Float32Array, sampleRate: number): LabelledHit[] {
-  return analyzeChannel(samples, sampleRate).hits.map((h) => ({
-    t: h.time,
-    class: h.lane === "hat" ? "hatClosed" : h.lane,
-  }));
-}
+import { addScores, parseTakeLabels, scoreHits, summarizeScore, type HitScore } from "@/analysis/golden";
+import { DETECTOR, detect } from "./detect.ts";
 
 const DIR = new URL("./takes/", import.meta.url);
 const BASELINE = new URL("./baseline.json", import.meta.url);
@@ -42,7 +32,7 @@ describe("golden takes", () => {
     console.table({ total: rounded.onsetF1 !== undefined ? { onsetF1: rounded.onsetF1, classAccuracy: rounded.classAccuracy } : {}, ...Object.fromEntries(Object.entries(rounded.perTake as Record<string, Scores>).map(([k, v]) => [k, { onsetF1: v.onsetF1, classAccuracy: v.classAccuracy }])) });
 
     if (process.env.GOLDEN_UPDATE) {
-      writeFileSync(BASELINE, JSON.stringify({ detector: "poc-heuristics", ...rounded }, null, 2) + "\n");
+      writeFileSync(BASELINE, JSON.stringify({ detector: DETECTOR, ...rounded }, null, 2) + "\n");
       return;
     }
     const base = JSON.parse(readFileSync(BASELINE, "utf8")) as Scores;

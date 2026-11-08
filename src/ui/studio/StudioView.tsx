@@ -28,7 +28,9 @@ export interface ForgeIn { t: SharedValue<number>; land: number[][]; pos: Shared
  * The Studio (docs/design/3-studio.dc.html): the song as a live grid, the mood, the macro knobs, export. During the
  * forge, the grid panel rises in and fills as dots land, then the rest rises in around it.
  */
-export function StudioView({ st, forge, gridRef }: { st: ReturnType<typeof useStudio>; forge?: ForgeIn; gridRef?: Ref<ComponentRef<typeof View>> }) {
+export function StudioView({ st, forge, gridRef, footer }: {
+  st: ReturnType<typeof useStudio>; forge?: ForgeIn; gridRef?: Ref<ComponentRef<typeof View>>; footer?: ReactNode;
+}) {
   const { song } = st;
   const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
@@ -102,6 +104,7 @@ export function StudioView({ st, forge, gridRef }: { st: ReturnType<typeof useSt
           disabled={!st.audio || st.busy !== null} accessibilityLabel="Export WAV, 8 bars" />
       </Rise>
       {st.status ? <Text style={[type.stat, s.muted]}>{st.status}</Text> : null}
+      {footer}
     </ScrollView>
   );
 }

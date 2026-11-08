@@ -13,6 +13,8 @@ export interface TakeLabels {
   performer: string;
   device: string;
   bpm?: number;
+  /** Seconds of count-in (clicks) at the start of the WAV: the take's bar 1 starts here (app takes). */
+  countInSec?: number;
   hits: LabelledHit[];
   /** Hummed segments for the 808 tracker (Phase 2); midi optional. */
   hum: { start: number; end: number; midi?: number }[];

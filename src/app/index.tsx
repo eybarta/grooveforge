@@ -7,11 +7,14 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
+import { takeFileName } from "@/analysis/audacity";
 import { useCalibration } from "@/audio/calibration";
 import type { Mood } from "@/audio/kit";
-import { outputLatency } from "@/audio/latency";
+import { alignTake, outputLatency } from "@/audio/latency";
+import { saveWav } from "@/audio/saveWav";
 import { type Take, useTake } from "@/audio/take";
 import type { AudioEngine } from "@/audio/types";
+import { encodeWav } from "@/audio/wav";
 import { useEngine } from "@/audio/useEngine";
 import { DEMOS, useStudio } from "@/audio/useStudio";
 import { barCells } from "@/song/grid";
@@ -129,7 +132,8 @@ function Session() {
       <Stack.Screen options={{ headerShown: false }} />
       {phase !== "record" && (
         <View style={StyleSheet.absoluteFill}>
-          <StudioView st={st} forge={phase === "forge" ? { t: forgeT, land, pos } : undefined} gridRef={gridEl} />
+          <StudioView st={st} forge={phase === "forge" ? { t: forgeT, land, pos } : undefined} gridRef={gridEl}
+            footer={__DEV__ && phase === "studio" && audio ? <SaveTake audio={audio} /> : undefined} />
         </View>
       )}
       {phase !== "studio" && (audio
@@ -139,6 +143,36 @@ function Session() {
       {phase === "forge" && geom && <ForgeOverlay t={forgeT} geom={geom} ribbon={ribbon} dots={dots} />}
       {phase === "forge" && <ForgingLabel t={forgeT} />}
     </View>
+  );
+}
+
+/**
+ * Dev: saves the last take for the golden set (docs: golden/README.md), shifted by the measured round trip. Its name
+ * carries mood, tempo and count-in for `npm run golden:import`; "-unaligned" if the route isn't calibrated yet.
+ */
+function SaveTake({ audio }: { audio: AudioEngine }) {
+  const take = useTake((t) => t.take);
+  const rtlMs = useCalibration((c) => c.rtlMs);
+  const [note, setNote] = useState("");
+  if (!take) return null;
+  const save = async () => {
+    try {
+      const route = (await audio.route()).outputs[0] ?? "unknown";
+      const now = new Date();
+      const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
+      const name = takeFileName({ mood: take.mood, bpm: take.bpm, countInSec: take.countInFrames / take.sampleRate, route, stamp });
+      const aligned = rtlMs !== null && Number.isFinite(rtlMs);
+      const samples = aligned ? alignTake(take.input, (rtlMs! / 1000) * take.sampleRate) : take.input;
+      await saveWav(encodeWav(samples, take.sampleRate), `${name}${aligned ? "" : "-unaligned"}.wav`);
+      setNote(aligned ? "Saved." : "Saved, but not latency-aligned: calibrate sync first for golden takes.");
+    } catch (e) {
+      setNote(`Save failed: ${e}`);
+    }
+  };
+  return (
+    <Pressable accessibilityRole="button" onPress={save} style={s.devSave}>
+      <Text style={[type.stat, s.muted]}>dev: save this take for the golden set{note ? ` · ${note}` : ""}</Text>
+    </Pressable>
   );
 }
 
@@ -325,5 +359,6 @@ const s = StyleSheet.create({
   hint: { color: color.muted, textAlign: "center", marginTop: 12, fontSize: 13 },
   error: { color: color.magenta, marginTop: 24 },
   devLink: { textAlign: "center", padding: 12 },
+  devSave: { minHeight: 44, justifyContent: "center" },
   forgingWrap: { position: "absolute", left: 0, right: 0, alignItems: "center", paddingHorizontal: space.page },
 });

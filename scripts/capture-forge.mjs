@@ -9,6 +9,7 @@
 // UNTIL=1.6 SLOW=4 renders just the first 1.6 s, 4× slower (out/forge/forge.mp4).
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { Buffer } from "node:buffer";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
