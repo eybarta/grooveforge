@@ -56,8 +56,10 @@ export interface AudioEngine {
   captureStop(): Promise<{ input: Float32Array; output: Float32Array }>;
   /** OS / browser reported latencies in seconds, for comparison with the measured round trip. */
   reportedLatency(): Record<string, number>;
-  /** The ports actually in use (iOS reports the current route; web only knows the mic label). */
+  /** The ports actually in use (iOS reports the current route; Chrome its default output; Safari nothing). */
   route(): Promise<{ inputs: string[]; outputs: string[] }>;
+  /** Calls back when the audio route changes (headphones, Bluetooth); returns the unsubscribe. */
+  onRouteChange(cb: () => void): () => void;
   /** Plays samples through the live context, one array per channel, once or looped (listening back to takes); stop() cuts it. */
   playBuffer(channels: Float32Array[], loop?: boolean): void;
   /** Renders `song` offline through the same engine, kit and program (or `program`): one loop, or `frames`. [L, R]. */

@@ -89,6 +89,10 @@ export async function createAudioEngine(): Promise<AudioEngine> {
       baseLatency: ctx.baseLatency,
       inputLatency: recorder.inputLatency,
     }),
+    onRouteChange(cb) {
+      const sub = AudioManager.addSystemEventListener("routeChange", () => cb());
+      return () => sub?.remove();
+    },
     async route() {
       const d = await AudioManager.getDevicesInfo();
       const names = (list: { name: string; category: string }[]) => list.map((x) => `${x.name} (${x.category})`);

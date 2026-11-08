@@ -6,8 +6,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { takeFileName } from "@/analysis/audacity";
 import { TEACH_CLASSES, TEACH_EACH, templatesFromTeach, useKit } from "@/analysis/kit";
-import { useCalibration } from "@/audio/calibration";
-import { alignTake, outputLatency, takeShiftSec } from "@/audio/latency";
+import { useCalibration, useRoute } from "@/audio/calibration";
+import { alignTake, outputLatency, takeRoundTrip } from "@/audio/latency";
 import { saveWav } from "@/audio/saveWav";
 import type { AudioEngine } from "@/audio/types";
 import { useEngine } from "@/audio/useEngine";
@@ -41,6 +41,7 @@ export default function Teach() {
 
 function Teacher({ audio }: { audio: AudioEngine }) {
   const router = useRouter();
+  useRoute(audio);
   const rtlMs = useCalibration((c) => c.rtlMs);
   const setTemplates = useKit((k) => k.setTemplates);
   const [phase, setPhase] = useState<"ready" | "listening" | "analysing" | "done">("ready");
@@ -58,7 +59,9 @@ function Teacher({ audio }: { audio: AudioEngine }) {
     setPhase("analysing");
     const { input, output } = await audio.captureStop();
     await audio.stop();
-    const aligned = alignTake(input, takeShiftSec(audio.reportedLatency(), rtlMs) * sr); // the take as heard
+    const rtl = takeRoundTrip({ input, output, countInFrames: COUNT_IN * beatFrames, sampleRate: sr }, audio.reportedLatency(), rtlMs);
+    if (rtl.from === "count-in") useCalibration.getState().setRtlMs(rtl.ms); // a fresh measurement of this route
+    const aligned = alignTake(input, (rtl.ms / 1000) * sr); // the take as heard
     const { hits } = await audio.analyze(aligned, output.subarray(0, aligned.length));
     const { templates, missing } = templatesFromTeach(hits, (COUNT_IN * beatFrames) / sr, beatFrames / sr);
     setTake(aligned);

@@ -1,4 +1,4 @@
-import { alignTake, takeShiftSec } from "@/audio/latency";
+import { alignTake, takeRoundTrip, takeShiftSec } from "@/audio/latency";
 import type { Take } from "@/audio/take";
 import type { AudioEngine } from "@/audio/types";
 import type { Song } from "@/song/types";
@@ -32,11 +32,12 @@ export function takeLoop(take: Take, song: Pick<Song, "bars">, reported: Record<
  */
 export async function songFromTake(audio: Pick<AudioEngine, "analyze" | "reportedLatency">, take: Take, templates: Template[] | null, rtlMs: number | null) {
   const sr = take.sampleRate;
-  const input = alignTake(take.input, takeShiftSec(audio.reportedLatency(), rtlMs) * sr);
+  const rtl = takeRoundTrip(take, audio.reportedLatency(), rtlMs);
+  const input = alignTake(take.input, (rtl.ms / 1000) * sr);
   const t0 = performance.now();
   const analysis = await audio.analyze(input, take.output.subarray(0, input.length));
   const analysedMs = performance.now() - t0;
   const bars = loopBars((input.length - take.countInFrames) / ((4 * 60 * sr) / take.bpm));
   const song = takeToSong(analysis, templates?.length ? makeKit(templates) : null, { bpm: take.bpm, bars, mood: take.mood, countInSec: take.countInFrames / sr });
-  return { song, analysis, analysedMs };
+  return { song, analysis, analysedMs, rtl };
 }

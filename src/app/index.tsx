@@ -10,7 +10,7 @@ import { scheduleOnRN } from "react-native-worklets";
 import { takeFileName } from "@/analysis/audacity";
 import { songFromTake } from "@/analysis/forgeTake";
 import { useKit } from "@/analysis/kit";
-import { useCalibration } from "@/audio/calibration";
+import { useCalibration, useRoute } from "@/audio/calibration";
 import type { Mood } from "@/audio/kit";
 import { alignTake, outputLatency } from "@/audio/latency";
 import { saveWav } from "@/audio/saveWav";
@@ -61,6 +61,7 @@ function Session() {
   const setTake = useTake((s) => s.setTake);
   const [phase, setPhase] = useState<"record" | "forge" | "studio">("record");
   const st = useStudio(phase === "record" ? null : audio);
+  useRoute(audio);
   const root = useRef<El>(null), ribbonEl = useRef<El>(null), buttonEl = useRef<El>(null), gridEl = useRef<El>(null);
   const [geom, setGeom] = useState<ForgeGeom | null>(null);
   const ribbon = useSharedValue<RibbonBar[]>([]);
@@ -122,12 +123,15 @@ function Session() {
   };
   const hear = async (take: Take) => {
     try {
-      const { song: heard, analysis, analysedMs } = await songFromTake(audio!, take, useKit.getState().templates, useCalibration.getState().rtlMs);
+      const { song: heard, analysis, analysedMs, rtl } = await songFromTake(audio!, take, useKit.getState().templates, useCalibration.getState().rtlMs);
+      const stored = useCalibration.getState().rtlMs;
+      if (rtl.from === "count-in") useCalibration.getState().setRtlMs(rtl.ms); // a fresh measurement of this route (drift)
       setSong(heard);
       const notes = Object.fromEntries(heard.tracks.map((t) => [t.kind, t.notes.length]));
       console.log("[take]", JSON.stringify({
         step: "heard", platform: audio!.platform, msSinceStop: Math.round(performance.now() - take.stoppedAt), analysedMs: Math.round(analysedMs),
         seconds: Math.round((take.input.length / take.sampleRate) * 10) / 10, hits: analysis.hits.length, notes, bars: heard.bars, swing: Math.round(heard.swing * 100) / 100,
+        rtl: { ms: Math.round(rtl.ms * 10) / 10, from: rtl.from, stored: stored === null ? null : Math.round(stored * 10) / 10, route: useCalibration.getState().route },
       }));
     } catch (e) {
       console.warn("[take]", JSON.stringify({ step: "analysis failed", error: String(e) }));

@@ -2,7 +2,7 @@ import { type ComponentRef, type ReactNode, type Ref, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { type SharedValue, useAnimatedStyle, useReducedMotion, useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useCalibration } from "@/audio/calibration";
+import { routeName, useCalibration } from "@/audio/calibration";
 import { outputLatency } from "@/audio/latency";
 import { LOUDNESS_TARGETS } from "@/audio/master";
 import type { AudioEngine } from "@/audio/types";
@@ -35,6 +35,7 @@ export function StudioView({ st, forge, gridRef, footer }: {
   const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
   const rtlMs = useCalibration((c) => c.rtlMs);
+  const route = routeName(useCalibration((c) => c.route));
   const [bar, setBar] = useState(0);
   const shownBar = forge ? 0 : Math.min(bar, song.bars - 1);
   const latency = st.audio ? outputLatency(st.audio.reportedLatency(), rtlMs, st.audio.sampleRate) : null;
@@ -81,8 +82,8 @@ export function StudioView({ st, forge, gridRef, footer }: {
           accessibilityLabel={latency?.calibrated ? "Recalibrate sync" : "Calibrate sync"} style={s.sync}>
           <Text style={[type.stat, s.muted]}>
             {st.busy === "calibrate" ? "Listening for clicks… keep it quiet"
-              : latency?.calibrated ? `Sync ${Math.round((latency.frames / st.audio!.sampleRate) * 1000)} ms · measured · tap to redo`
-                : "Sync not measured yet · tap to calibrate"}
+              : latency?.calibrated ? `Sync ${Math.round((latency.frames / st.audio!.sampleRate) * 1000)} ms on ${route} · measured · tap to redo`
+                : `Sync not measured on ${route} yet · tap to calibrate`}
           </Text>
         </Pressable>
         <View style={s.knobs}>

@@ -183,7 +183,16 @@ export async function createAudioEngine(): Promise<AudioEngine> {
         inputLatency: inputLatency ?? NaN,
       };
     },
-    route: async () => ({ inputs: mic ? mic.getAudioTracks().map((t) => t.label) : [], outputs: [] }),
+    async route() {
+      // Chrome lists outputs (labels once the mic is allowed) with "default" = what's playing; Safari lists none
+      const devices = await navigator.mediaDevices?.enumerateDevices().catch(() => []) ?? [];
+      const out = devices.filter((d) => d.kind === "audiooutput" && d.deviceId === "default" && d.label).map((d) => d.label.replace(/^Default - /, ""));
+      return { inputs: mic ? mic.getAudioTracks().map((t) => t.label) : [], outputs: out };
+    },
+    onRouteChange(cb) {
+      navigator.mediaDevices?.addEventListener("devicechange", cb);
+      return () => navigator.mediaDevices?.removeEventListener("devicechange", cb);
+    },
     playBuffer(channels, loop = false) {
       const b = ctx.createBuffer(channels.length, channels[0]!.length, ctx.sampleRate);
       channels.forEach((c, i) => b.getChannelData(i).set(c));

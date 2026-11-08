@@ -93,6 +93,26 @@ export function summarize(est: LagEstimate, sampleRate: number, minScore = MIN_C
 /** CLAUDE.md: recorded takes are shifted by the measured round trip before analysis. */
 export const alignTake = (input: Float32Array, rtlFrames: number) => input.subarray(Math.max(0, Math.round(rtlFrames)));
 
+/**
+ * A take's own round trip, from its count-in clicks, when the mic heard them (a speaker, leaky earbuds); null on
+ * headphones. Searches ±30 ms around the route's calibrated value if there is one (cheap), else 0–500 ms. Trusted
+ * with ≥ 3 clicks heard that agree within 2 ms (CLAUDE.md: re-verify around takes; latency drifts on Bluetooth and web).
+ */
+export function countInRtl(take: { input: Float32Array; output: Float32Array; countInFrames: number; sampleRate: number }, nearMs: number | null): LatencyResult | null {
+  const sr = take.sampleRate;
+  const [lo, hi] = nearMs !== null && Number.isFinite(nearMs) ? [Math.max(0, nearMs / 1000 - 0.03), nearMs / 1000 + 0.03] : [0, 0.5];
+  const r = summarize(estimateLags(take.output.subarray(0, take.countInFrames), take.input, sr, lo, hi), sr);
+  return r.clicks >= 3 && r.spreadMs <= 2 ? r : null;
+}
+
+/** The round trip a take is shifted by: its own count-in if the mic heard it, else the route's calibration, else the OS figure (short). */
+export function takeRoundTrip(take: Parameters<typeof countInRtl>[0], reported: Record<string, number>, rtlMs: number | null) {
+  const heard = countInRtl(take, rtlMs);
+  if (heard) return { ms: heard.rtlMs, from: "count-in" as const };
+  if (rtlMs !== null && Number.isFinite(rtlMs)) return { ms: rtlMs, from: "calibration" as const };
+  return { ms: takeShiftSec(reported, null) * 1000, from: "os" as const };
+}
+
 /** The round trip to shift a take by (s): measured if this route is calibrated, else what the OS reports (short). */
 export const takeShiftSec = (reported: Record<string, number>, rtlMs: number | null) =>
   rtlMs !== null && Number.isFinite(rtlMs) ? rtlMs / 1000 : (reported.outputLatency || 0) + (reported.inputLatency || 0);
