@@ -8,6 +8,7 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { color } from "@/ui/theme";
 
 void SplashScreen.preventAutoHideAsync();
@@ -24,12 +25,14 @@ export default function RootLayout() {
   if (!loaded && !error) return null;
 
   return (
-    <Stack
-      screenOptions={{
-        contentStyle: { backgroundColor: color.ground },
-        headerStyle: { backgroundColor: color.ground },
-        headerTintColor: color.text,
-      }}
-    />
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <Stack
+        screenOptions={{
+          contentStyle: { backgroundColor: color.ground },
+          headerStyle: { backgroundColor: color.ground },
+          headerTintColor: color.text,
+        }}
+      />
+    </GestureHandlerRootView>
   );
 }
