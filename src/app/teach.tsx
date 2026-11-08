@@ -62,7 +62,7 @@ function Teacher({ audio }: { audio: AudioEngine }) {
     const r = audio.reportedLatency();
     const rtl = rtlMs !== null && Number.isFinite(rtlMs) ? rtlMs / 1000 : (r.outputLatency || 0) + (r.inputLatency || 0);
     const aligned = alignTake(input, rtl * sr);
-    const hits = await audio.analyze(aligned, output.subarray(0, aligned.length));
+    const { hits } = await audio.analyze(aligned, output.subarray(0, aligned.length));
     const { templates, missing } = templatesFromTeach(hits, (COUNT_IN * beatFrames) / sr, beatFrames / sr);
     setTake(aligned);
     if (missing.length) {

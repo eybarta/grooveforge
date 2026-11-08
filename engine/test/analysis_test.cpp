@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "gf/Analysis.h"
+#include "gf/Pitch.h"
 
 namespace {
 constexpr float kSr = 48000.f;
@@ -112,6 +113,30 @@ int main() {
     const auto a = gf::analyzeTake(x.data(), n, kSr, o);
     std::printf("metronome bleed: %zu onsets without the reference, %zu with it (2 hits)\n", heard.onsets.size(), a.onsets.size());
     assert(a.onsets.size() == 2 && std::fabs(a.onsets[0].time - 1.0) < 0.002 && std::fabs(a.onsets[1].time - 2.25) < 0.002);
+  }
+  {
+    // a hum: 0.5–1.5 s A2 (110 Hz), silence, 2–3 s a slide from A2 up to E3 (165 Hz) and holding there; with noise
+    const int n = static_cast<int>(3.5 * kSr);
+    std::vector<float> x(n);
+    Rng rng;
+    double phase = 0;
+    for (int i = 0; i < n; ++i) {
+      const double t = static_cast<double>(i) / kSr;
+      const bool on = (t >= 0.5 && t < 1.5) || (t >= 2.0 && t < 3.0);
+      const double hz = t < 2.0 ? 110 : 110 * std::pow(1.5, std::min(1.0, (t - 2.0) / 0.3));
+      phase += 2 * M_PI * hz / kSr;
+      x[i] = (on ? 0.3f * static_cast<float>(std::sin(phase) + 0.5 * std::sin(2 * phase) + 0.25 * std::sin(3 * phase)) : 0.f) + 0.003f * rng.next();
+    }
+    const auto f0 = gf::pyin(x.data(), n, kSr);
+    assert(static_cast<int>(f0.size()) == n / gf::kPitchHop + 1);
+    auto at = [&](double t) { return f0[static_cast<size_t>(t * kSr / gf::kPitchHop + 0.5)]; };
+    auto cents = [](float hz, double ref) { return hz > 0 ? 1200 * std::log2(hz / ref) : 1e9; };
+    std::printf("pyin: %.1f Hz at 1.0 s (110), %.1f at 1.75 s (0 = silence), %.1f at 2.15 s (sliding), %.1f at 2.7 s (165)\n",
+                at(1.0), at(1.75), at(2.15), at(2.7));
+    for (double t = 0.6; t < 1.4; t += 0.05) assert(std::fabs(cents(at(t), 110)) < 25);
+    for (double t = 2.4; t < 2.9; t += 0.05) assert(std::fabs(cents(at(t), 165)) < 25);
+    for (double t = 1.6; t < 1.9; t += 0.05) assert(at(t) == 0);
+    assert(at(2.15) > 115 && at(2.15) < 160);  // in between while it slides
   }
   std::printf("analysis_test: ok\n");
 }

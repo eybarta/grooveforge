@@ -19,7 +19,7 @@ describe.skipIf(!existsSync(WASM) && !process.env.CI)("take analysis on the gold
       const { samples, sampleRate } = decodeWav(readFileSync(`${TAKES}/${name}.wav`));
       const labels = parseTakeLabels(JSON.parse(readFileSync(`${TAKES}/${name}.json`, "utf8")), samples.length / sampleRate, name);
       const t0 = performance.now();
-      const hits = analyzeTake(w, samples, sampleRate);
+      const { hits } = analyzeTake(w, samples, sampleRate);
       const ms = Math.round(performance.now() - t0);
       // classes don't count yet: give every detection the class of the reference it would match
       const s = scoreHits(labels.hits, hits.map((h) => ({ t: h.t, class: "kick" as const })), 0.03);

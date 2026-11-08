@@ -17,7 +17,8 @@ const TAKES = new URL("./takes/", import.meta.url);
 let engine: GfWasm | null = null;
 const wasm = () => (engine ??= instantiateEngine(new WebAssembly.Module(readFileSync(WASM))));
 
-export const findHits = (samples: Float32Array, sampleRate: number): DetectedHit[] => analyzeTake(wasm(), samples, sampleRate);
+export const analyze = (samples: Float32Array, sampleRate: number) => analyzeTake(wasm(), samples, sampleRate);
+export const findHits = (samples: Float32Array, sampleRate: number): DetectedHit[] => analyze(samples, sampleRate).hits;
 
 /** A teach session's templates: each labelled example, with the features of the detected hit at it (±30 ms). */
 export function kitFrom(samples: Float32Array, sampleRate: number, labels: TakeLabels): Kit {

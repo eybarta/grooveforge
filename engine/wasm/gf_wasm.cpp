@@ -4,6 +4,7 @@
 #include "gf/Analysis.h"
 #include "gf/Engine.h"
 #include "gf/Loudness.h"
+#include "gf/Pitch.h"
 
 extern "C" {
 
@@ -29,11 +30,14 @@ void gf_loudness(const float* l, const float* r, int frames, float sampleRate, f
 }
 /** Floats per onset row from gf_analyze: [time s, strength, kHitFeatures features] (src/analysis/analyze.ts checks it). */
 int gf_onset_stride() { return 2 + gf::kHitFeatures; }
+/** Input samples per pitch frame (gf::kPitchHop); gf_analyze writes n / hop + 1 of them. */
+int gf_pitch_hop() { return gf::kPitchHop; }
 /**
  * Analyses a mono take (src/analysis/analyze.ts). ref: what the engine played on the take's timeline, or null.
- * Writes onset rows (gf_onset_stride floats each) into out, at most maxRows; returns how many onsets there are.
+ * Writes onset rows (gf_onset_stride floats each) into out, at most maxRows, and the hum's pitch (Hz, 0 = unvoiced;
+ * n / gf_pitch_hop() + 1 floats) into f0 unless it is null; returns how many onsets there are.
  */
-int gf_analyze(const float* x, int n, float sampleRate, const float* ref, float* out, int maxRows) {
+int gf_analyze(const float* x, int n, float sampleRate, const float* ref, float* out, int maxRows, float* f0) {
   gf::AnalysisOptions o;
   o.reference = ref;
   const auto a = gf::analyzeTake(x, n, sampleRate, o);
@@ -44,6 +48,7 @@ int gf_analyze(const float* x, int n, float sampleRate, const float* ref, float*
     row[1] = a.onsets[i].strength;
     std::copy(a.onsets[i].features, a.onsets[i].features + gf::kHitFeatures, row + 2);
   }
+  if (f0) std::copy(a.f0.begin(), a.f0.end(), f0);
   return count;
 }
 int gf_load_sample(gf::Engine* e, int slot, const float* l, const float* r, int frames, float sampleRate) {

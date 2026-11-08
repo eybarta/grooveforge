@@ -1,8 +1,9 @@
 // Web worker for the engine's take analysis (engine/src/Analysis.cpp via gf-engine.wasm), so the main thread (which
 // draws the web app's animations) stays free while a take is analysed. Plain JS like gf-engine-worklet.js: Metro
 // doesn't bundle it. Message in: { id, take: Float32Array, reference?: Float32Array, sampleRate } (transferred);
-// out: { id, rows: Float32Array } (onset rows, see src/analysis/analyze.ts hitsFromRows) or { id, error }.
+// out: { id, rows: Float32Array, f0: Float32Array } (onset rows and pitch, see src/analysis/analyze.ts) or { id, error }.
 const MAX_HITS = 4096;
+const PITCH_HOP = 512; // gf::kPitchHop
 let ready = null;
 
 function engine() {
@@ -29,10 +30,13 @@ self.onmessage = async ({ data }) => {
     const px = put(take);
     const pr = reference ? put(reference) : 0;
     const po = ex.gf_alloc(stride * MAX_HITS);
-    const count = Math.min(MAX_HITS, ex.gf_analyze(px, take.length, sampleRate, pr, po, MAX_HITS));
+    const frames = Math.floor(take.length / PITCH_HOP) + 1;
+    const pf = ex.gf_alloc(frames);
+    const count = Math.min(MAX_HITS, ex.gf_analyze(px, take.length, sampleRate, pr, po, MAX_HITS, pf));
     const rows = new Float32Array(ex.memory.buffer, po, stride * count).slice();
-    for (const p of [px, pr, po]) if (p) ex.gf_free(p);
-    self.postMessage({ id, rows }, [rows.buffer]);
+    const f0 = new Float32Array(ex.memory.buffer, pf, frames).slice();
+    for (const p of [px, pr, po, pf]) if (p) ex.gf_free(p);
+    self.postMessage({ id, rows, f0 }, [rows.buffer, f0.buffer]);
   } catch (e) {
     self.postMessage({ id, error: String(e) });
   }

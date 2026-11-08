@@ -3,7 +3,9 @@ import { noteTimeSec } from "@/song/time";
 import type { DetectedHit } from "./analyze";
 import { makeKit } from "./classify";
 import { UNSURE } from "@/song/grid";
-import { estimateSwing, takeToSong } from "./takeToSong";
+import { estimateSwing, takeToSong as fromAnalysis, type TakeInfo } from "./takeToSong";
+
+const takeToSong = (hits: DetectedHit[], kit: Parameters<typeof fromAnalysis>[1], info: TakeInfo) => fromAnalysis({ hits, f0: new Float32Array(0), f0Hop: 512 / 48000 }, kit, info);
 
 const bpm = 90, s16 = 60 / bpm / 4, countIn = 4 * 4 * s16;
 // features: [0] tells the classes apart for the test kit; [13] is the brightness the no-kit guess uses

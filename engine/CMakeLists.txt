@@ -12,7 +12,7 @@ if(UNIX AND NOT APPLE)
   target_link_libraries(ebur128 PRIVATE m)
 endif()
 
-add_library(gf_engine STATIC src/Engine.cpp src/Mixer.cpp src/Loudness.cpp src/Analysis.cpp)
+add_library(gf_engine STATIC src/Engine.cpp src/Mixer.cpp src/Loudness.cpp src/Analysis.cpp src/Pitch.cpp)
 target_include_directories(gf_engine PUBLIC include)
 target_include_directories(gf_engine SYSTEM PRIVATE third_party third_party/signalsmith-basics/include)
 target_link_libraries(gf_engine PRIVATE ebur128)

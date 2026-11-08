@@ -111,8 +111,9 @@ class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
     result.setProperty(runtime, "truePeakDb", m.truePeakDb);
     return result;
   }
-  // analyze(take: ArrayBuffer, reference: ArrayBuffer | null) → number[]: onset rows [time s, strength, features…]
-  // (2 + gf::kHitFeatures each; src/analysis/analyze.ts). Runs here on the JS thread: the UI thread keeps animating.
+  // analyze(take: ArrayBuffer, reference: ArrayBuffer | null) → { onsets: number[], f0: ArrayBuffer }: onset rows
+  // [time s, strength, features…] (2 + gf::kHitFeatures each) and the hum's pitch per gf::kPitchHop (Float32, Hz,
+  // 0 = unvoiced); src/analysis/analyze.ts. Runs here on the JS thread: the UI thread keeps animating.
   JSI_HOST_FUNCTION_DECL(analyze) {
     auto take = args[0].asObject(runtime).getArrayBuffer(runtime);
     const int n = static_cast<int>(take.size(runtime) / sizeof(float));
@@ -129,7 +130,10 @@ class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
       rows.setValueAtIndex(runtime, i * stride + 1, static_cast<double>(a.onsets[i].strength));
       for (int f = 0; f < gf::kHitFeatures; ++f) rows.setValueAtIndex(runtime, i * stride + 2 + f, static_cast<double>(a.onsets[i].features[f]));
     }
-    return rows;
+    jsi::Object result(runtime);
+    result.setProperty(runtime, "onsets", rows);
+    result.setProperty(runtime, "f0", copy(runtime, a.f0.data(), static_cast<int>(a.f0.size())));
+    return result;
   }
   // loadSample(slot, left: ArrayBuffer, right: ArrayBuffer | null, sampleRate) → boolean
   JSI_HOST_FUNCTION_DECL(loadSample) {

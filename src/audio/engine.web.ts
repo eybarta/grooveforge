@@ -1,4 +1,4 @@
-import { hitsFromRows } from "@/analysis/analyze";
+import { fromEngine } from "@/analysis/analyze";
 import { Asset } from "expo-asset";
 import { defaultInstruments, songToEngineEvents } from "@/song/time";
 import type { Song } from "@/song/types";
@@ -89,17 +89,17 @@ async function wasmTools(bytes: ArrayBuffer): Promise<WasmTools> {
 }
 
 /** One analysis worker for the page (public/gf-analysis-worker.js), started on first use. */
-let worker: { run: (take: Float32Array, reference?: Float32Array) => Promise<Float32Array> } | null = null;
+let worker: { run: (take: Float32Array, reference?: Float32Array) => Promise<{ rows: Float32Array; f0: Float32Array }> } | null = null;
 function analysis() {
   if (worker) return worker;
   const w = new Worker("/gf-analysis-worker.js");
-  const pending = new Map<number, { ok: (rows: Float32Array) => void; fail: (e: Error) => void }>();
+  const pending = new Map<number, { ok: (r: { rows: Float32Array; f0: Float32Array }) => void; fail: (e: Error) => void }>();
   let next = 0;
   w.onmessage = ({ data }) => {
     const p = pending.get(data.id);
     pending.delete(data.id);
     if (data.error) p?.fail(new Error(data.error));
-    else p?.ok(data.rows);
+    else p?.ok(data);
   };
   worker = {
     run: (take, reference) => new Promise((ok, fail) => {
@@ -208,7 +208,8 @@ export async function createAudioEngine(): Promise<AudioEngine> {
     },
     async analyze(take, reference) {
       const ref = reference && reference.length >= take.length ? reference.slice(0, take.length) : undefined;
-      return hitsFromRows(await analysis().run(take.slice(), ref));
+      const { rows, f0 } = await analysis().run(take.slice(), ref);
+      return fromEngine(rows, f0, SAMPLE_RATE);
     },
     async loudness([l, r = l]) {
       tools ??= wasmTools(wasmBytes);

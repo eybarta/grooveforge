@@ -1,4 +1,5 @@
 #include "gf/Analysis.h"
+#include "gf/Pitch.h"
 
 #include <algorithm>
 #include <cmath>
@@ -371,6 +372,7 @@ TakeAnalysis analyzeTake(const float* x, int n, float sampleRate, const Analysis
     const int end = i + 1 < out.onsets.size() ? static_cast<int>(out.onsets[i + 1].time * sampleRate) : n;
     hitFeatures(out.percussive, at, end, sampleRate, out.onsets[i].features);
   }
+  out.f0 = pyin(out.harmonic.data(), n, sampleRate);
   return out;
 }
 

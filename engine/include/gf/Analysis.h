@@ -24,6 +24,7 @@ struct Onset {
 struct TakeAnalysis {
   std::vector<float> percussive, harmonic;  // HPSS split of the (normalised) take; same length as the input
   std::vector<Onset> onsets;
+  std::vector<float> f0;  // the hum: pYIN on the harmonic part (gf/Pitch.h), Hz per kPitchHop, 0 = unvoiced
 };
 
 struct AnalysisOptions {

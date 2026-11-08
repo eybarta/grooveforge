@@ -104,6 +104,19 @@ export function matchHits<T extends LabelledHit>(ref: LabelledHit[], est: T[], t
   return { score, pairs };
 }
 
+/**
+ * Hum notes against the labelled hum, as mir_eval.transcription (without offsets): a note matches a label when it
+ * starts within 50 ms of it and, if the label has a pitch, is within ½ semitone of it; one note per label.
+ */
+export function scoreHum(ref: TakeLabels["hum"], est: { start: number; midi: number }[], onsetSec = 0.05) {
+  const used = new Set<number>();
+  for (const r of ref) {
+    const i = est.findIndex((e, k) => !used.has(k) && Math.abs(e.start - r.start) <= onsetSec && (r.midi === undefined || Math.abs(e.midi - r.midi) <= 0.5));
+    if (i >= 0) used.add(i);
+  }
+  return { tp: used.size, fp: est.length - used.size, fn: ref.length - used.size };
+}
+
 export function summarizeScore(s: HitScore) {
   const precision = s.tp + s.fp ? s.tp / (s.tp + s.fp) : 0;
   const recall = s.tp + s.fn ? s.tp / (s.tp + s.fn) : 0;
