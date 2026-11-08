@@ -61,6 +61,11 @@ button:disabled { opacity: .38; cursor: default; }
 .readout { font: 500 .95rem/1 var(--mono); text-align: center; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 1em; }
 .answers { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
 .answers button { border-radius: 1rem; }
+.send {
+  display: flex; align-items: center; justify-content: center; min-height: 48px; padding: .7rem 1.2rem; border-radius: 999px;
+  font: 700 1rem/1.2 var(--ui); color: #07060B; background: #25D366; text-decoration: none;
+}
+.send:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
 .code { font: 500 1.35rem/1.2 var(--mono); letter-spacing: .06em; padding: 1rem; border-radius: 1rem; border: 1px dashed var(--muted); text-align: center; user-select: all; overflow-wrap: anywhere; }
 .note { font-size: .875rem; }
 .err { color: var(--a); font-size: .875rem; }
@@ -121,6 +126,7 @@ button:disabled { opacity: .38; cursor: default; }
       <h2>Thanks for listening</h2>
       <p>Send this code to the person who shared the test with you. It records your six answers and nothing else.</p>
       <div class="code" id="code"></div>
+      <a class="send" id="whatsapp" href="https://wa.me/" target="_blank" rel="noopener">Send it on WhatsApp</a>
       <button type="button" id="copy">Copy code</button>
     </div>
   </section>
@@ -262,7 +268,10 @@ function pick(k) {
   buffers = [null, null];
   $("trial").hidden = true;
   $("done").hidden = false;
-  $("code").textContent = `GF1.${run.device}.${PAIRS.map((p) => run.picks[p.id]).join("")}`;
+  const code = `GF1.${run.device}.${PAIRS.map((p) => run.picks[p.id]).join("")}`;
+  $("code").textContent = code;
+  // WhatsApp opens with the message typed; they pick the chat it came from and tap send (no number needed)
+  $("whatsapp").href = `https://wa.me/?text=${encodeURIComponent(`My GrooveForge listening test code: ${code}`)}`;
 }
 $("pick-a").addEventListener("click", () => pick(0));
 $("pick-b").addEventListener("click", () => pick(1));
