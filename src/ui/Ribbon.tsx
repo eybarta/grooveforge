@@ -10,19 +10,27 @@ const COLORS = [LANES_UI.kick.color, LANES_UI.snare.color, LANES_UI.hatClosed.co
 // the mockup's resting ribbon: quiet grey bars of uneven height
 const REST = Array.from({ length: RIBBON_BARS }, (_, i) => 10 + Math.round(Math.abs(Math.sin(i * 1.7)) * 14));
 
+/** Bar `i` of the ribbon (`w` = ribbon width; level `b` or the resting shape): shared with the forge overlay. */
+export function ribbonBar(i: number, w: number, list: RibbonBar[]) {
+  "worklet";
+  const bw = (w - (RIBBON_BARS - 1) * GAP) / RIBBON_BARS;
+  const b = list[i - (RIBBON_BARS - list.length)];
+  const h = b ? 10 + 62 * Math.sqrt(Math.min(1, b.h)) : REST[i]!;
+  return { x: i * (bw + GAP), y: (H - h) / 2, w: bw, h, color: b && b.lane >= 0 ? COLORS[b.lane]! : "#FFFFFF", alpha: b && b.lane >= 0 ? 1 : 0.16 };
+}
+export const RIBBON_H = H;
+
 /** The take as it's recorded: one bar per 16th, newest on the right; a bar with a hit in it lights in a lane colour. */
 export function Ribbon({ bars }: { bars: SharedValue<RibbonBar[]> }) {
   const [w, setW] = useState(0);
   const picture = useDerivedValue(() => createPicture((canvas) => {
-    const bw = (w - (RIBBON_BARS - 1) * GAP) / RIBBON_BARS;
     const list = bars.value;
     const paint = Skia.Paint();
     for (let i = 0; i < RIBBON_BARS; i++) {
-      const b = list[i - (RIBBON_BARS - list.length)];
-      const h = b ? 10 + 62 * Math.sqrt(Math.min(1, b.h)) : REST[i]!;
-      paint.setColor(Skia.Color(b && b.lane >= 0 ? COLORS[b.lane]! : "#FFFFFF"));
-      paint.setAlphaf(b && b.lane >= 0 ? 1 : 0.16);
-      canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(i * (bw + GAP), (H - h) / 2, bw, h), 3, 3), paint);
+      const r = ribbonBar(i, w, list);
+      paint.setColor(Skia.Color(r.color));
+      paint.setAlphaf(r.alpha);
+      canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(r.x, r.y, r.w, r.h), 3, 3), paint);
     }
   }));
   return (

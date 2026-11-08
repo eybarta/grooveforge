@@ -4,7 +4,6 @@ import { useSong } from "@/song/store";
 import { defaultInstruments } from "@/song/time";
 import type { Song } from "@/song/types";
 import { useCalibration } from "./calibration";
-import { createAudioEngine } from "./engine";
 import type { Mood } from "./kit";
 import { loadKit } from "./loadKit";
 import type { LoudnessTarget } from "./master";
@@ -24,14 +23,15 @@ const r2 = (x: number) => Math.round(x * 100) / 100;
 /**
  * The Studio's engine: the song in the store plays live, through the mood's kit, mix and master, at the gain that
  * hits the loudness target (so live sounds like the export). Every change applies at once at the last gain, then
- * the gain is re-found in the background. Logs "[studio]" JSON for remote checks.
+ * the gain is re-found in the background. `audio` = the screen's engine (null: idle, e.g. while Record uses it).
+ * Logs "[studio]" JSON for remote checks.
  */
-export function useStudio() {
+export function useStudio(audio: AudioEngine | null) {
   const song = useSong((s) => s.song);
   const setSong = useSong((s) => s.setSong);
   const setRtlMs = useCalibration((c) => c.setRtlMs);
-  const [audio, setAudio] = useState<AudioEngine | null>(null);
-  const [status, setStatus] = useState("Starting the engine…");
+  const [kitReady, setKitReady] = useState<AudioEngine | null>(null); // the engine the kit is loaded into
+  const [status, setStatus] = useState("");
   const [knobs, setKnobs] = useState<Knobs>(DEFAULT_KNOBS);
   const [target, setTarget] = useState<LoudnessTarget>("loud");
   const [playing, setPlaying] = useState(false);
@@ -47,48 +47,44 @@ export function useStudio() {
   }, [setSong]);
 
   useEffect(() => {
-    let created: AudioEngine | null = null;
-    (async () => {
-      const a = await createAudioEngine();
-      created = a;
-      const kit = await loadKit(a);
-      console.log("[studio]", JSON.stringify({ step: "kit loaded", platform: a.platform, ...kit }));
-      setAudio(a);
-      setStatus("");
-      if (__DEV__) Object.assign(globalThis, { __gfStudio: { a, masterSong, studioProgram, DEMOS } });
-    })().catch((e) => setStatus(`The engine didn't start: ${e}`));
-    return () => void created?.close();
-  }, []);
+    if (!audio || kitReady === audio) return;
+    loadKit(audio).then((kit) => {
+      console.log("[studio]", JSON.stringify({ step: "kit loaded", platform: audio.platform, ...kit }));
+      setKitReady(audio);
+      if (__DEV__) Object.assign(globalThis, { __gfStudio: { a: audio, masterSong, studioProgram, DEMOS } });
+    }).catch((e) => setStatus(`The kit didn't load: ${e}`));
+  }, [audio, kitReady]);
+  const ready = audio && kitReady === audio ? audio : null;
 
   // every song / knob / target change: apply now at the last gain, then re-find the gain (newest change wins)
   useEffect(() => {
-    if (!audio || !song.tracks.length) return;
+    if (!ready || !song.tracks.length) return;
     const id = ++tuning.current;
     (async () => {
-      await audio.setSong(song);
-      await audio.setProgram(studioProgram(song, knobs, gainDb.current));
-      const r = await masterSong(audio, song, knobs, target, liveLoops(song));
+      await ready.setSong(song);
+      await ready.setProgram(studioProgram(song, knobs, gainDb.current));
+      const r = await masterSong(ready, song, knobs, target, liveLoops(song));
       if (id !== tuning.current) return;
       gainDb.current = r.gainDb;
-      await audio.setProgram(studioProgram(song, knobs, r.gainDb));
+      await ready.setProgram(studioProgram(song, knobs, r.gainDb));
       console.log("[studio]", JSON.stringify({ step: "loudness", mood: song.mood, target, lufs: r2(r.lufs), gainDb: r2(r.gainDb) }));
     })().catch((e) => setStatus(`Mix update failed: ${e}`));
-  }, [audio, song, knobs, target]);
+  }, [ready, song, knobs, target]);
 
   const toggle = async () => {
-    if (!audio) return;
-    if (playing) await audio.stop();
-    else await audio.start();
+    if (!ready) return;
+    if (playing) await ready.stop();
+    else await ready.start();
     setPlaying(!playing);
   };
 
   const exportWav = async () => {
-    if (!audio || busy) return;
+    if (!ready || busy) return;
     setBusy("export");
     try {
-      const r = await masterSong(audio, song, knobs, target, exportLoops(song));
+      const r = await masterSong(ready, song, knobs, target, exportLoops(song));
       const name = `grooveforge-${song.mood}-${target}.wav`;
-      await saveWav(encodeWav(r.channels, audio.sampleRate, "24"), name);
+      await saveWav(encodeWav(r.channels, ready.sampleRate, "24"), name);
       log("export", { name, lufs: r2(r.lufs), truePeakDb: r2(r.truePeakDb), ok: r.ok });
     } catch (e) {
       setStatus(`Export failed: ${e}`);
@@ -99,26 +95,26 @@ export function useStudio() {
 
   /** Measures the round trip with clicks (plain sine program, no mix), then puts the song and mix back. */
   const runCalibration = async () => {
-    if (!audio || busy) return;
+    if (!ready || busy) return;
     setBusy("calibrate");
     setPlaying(false);
     try {
-      await audio.setProgram({ instruments: defaultInstruments() });
-      const c = await calibrate(audio);
+      await ready.setProgram({ instruments: defaultInstruments() });
+      const c = await calibrate(ready);
       if (Number.isFinite(c.rtlMs) && c.reliable) setRtlMs(c.rtlMs);
       else setStatus("Couldn't hear the clicks clearly. Turn the volume up and try again.");
       log("calibrate", { rtlMs: r2(c.rtlMs), repeatabilityMs: r2(c.repeatabilityMs), reliable: c.reliable });
     } catch (e) {
       setStatus(`Calibration failed: ${e}`);
     } finally {
-      await audio.setSong(song);
-      await audio.setProgram(studioProgram(song, knobs, gainDb.current));
+      await ready.setSong(song);
+      await ready.setProgram(studioProgram(song, knobs, gainDb.current));
       setBusy(null);
     }
   };
 
   return {
-    audio, status, song, knobs, target, playing, busy,
+    audio: ready, status, song, knobs, target, playing, busy,
     setMood: (m: Mood) => setSong(DEMOS[m]()),
     editSong: setSong,
     setKnob: (k: keyof Knobs, v: number) => setKnobs((prev) => ({ ...prev, [k]: v })),

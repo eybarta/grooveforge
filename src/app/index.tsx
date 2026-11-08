@@ -1,81 +1,186 @@
-import { Link, Redirect, Stack, useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { Link, Redirect, Stack, useLocalSearchParams } from "expo-router";
+import { type ComponentRef, type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
-  useAnimatedReaction, useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withSpring,
+  type SharedValue, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useFrameCallback, useReducedMotion, useSharedValue,
+  withSpring,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { useCalibration } from "@/audio/calibration";
-import { createAudioEngine } from "@/audio/engine";
 import type { Mood } from "@/audio/kit";
 import { outputLatency } from "@/audio/latency";
-import { useTake } from "@/audio/take";
+import { type Take, useTake } from "@/audio/take";
 import type { AudioEngine } from "@/audio/types";
-import { DEMOS } from "@/audio/useStudio";
+import { useEngine } from "@/audio/useEngine";
+import { DEMOS, useStudio } from "@/audio/useStudio";
+import { barCells } from "@/song/grid";
 import { metronome } from "@/song/metronome";
 import { useSong } from "@/song/store";
 import { defaultInstruments } from "@/song/time";
 import { Chip } from "@/ui/controls";
+import { B, FLOW, leaves } from "@/ui/forge/flow";
+import { type Dot, type ForgeGeom, ForgeOverlay } from "@/ui/forge/ForgeOverlay";
+import { prog, spring } from "@/ui/motion";
 import { Orb } from "@/ui/Orb";
 import { Ribbon } from "@/ui/Ribbon";
-import { color, motion, space, type } from "@/ui/theme";
-import { useMicVisuals } from "@/ui/useMicVisuals";
+import { STUDIO_LANES, StudioView } from "@/ui/studio/StudioView";
+import { color, LANES_UI, motion, space, type } from "@/ui/theme";
+import { RIBBON_BARS, type RibbonBar, useMicVisuals } from "@/ui/useMicVisuals";
 import { usePlayhead } from "@/ui/usePlayhead";
 
 // dev hook: `EXPO_PUBLIC_SPIKE_AUTO=render npx expo start` opens the spike and runs the offline render headlessly
 const SPIKE_AUTO = process.env.EXPO_PUBLIC_SPIKE_AUTO;
 const TAKE_BARS = 4; // after a one-bar count-in (P2 makes 2/4/8 a choice)
 const SPRING = { stiffness: 144, damping: 19.2, mass: 1 }; // the film's ω = 12, ζ = 0.8
+type El = ComponentRef<typeof View>;
 
 export default function Index() {
   if (SPIKE_AUTO) return <Redirect href={{ pathname: "/dev/spike", params: { auto: SPIKE_AUTO } }} />;
-  return <RecordScreen />;
+  return <Session />;
 }
 
-/** Record (docs/design/1-record.dc.html): count in, beatbox + hum one take over the click, then forge it. */
-function RecordScreen() {
-  const [audio, setAudio] = useState<AudioEngine | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  // only while this screen shows: Studio (pushed on top) runs its own engine, and the mic must not stay open here
-  useFocusEffect(useCallback(() => {
-    let created: AudioEngine | null = null;
-    let gone = false;
-    createAudioEngine().then((a) => { created = a; if (gone) void a.close(); else setAudio(a); })
-      .catch((e) => setError(`The audio engine didn't start: ${e}`));
-    return () => {
-      gone = true;
-      setAudio(null);
-      void created?.close();
-    };
-  }, []));
-  return audio ? <Recorder audio={audio} /> : <Shell>{error && <Text style={[type.body, s.error]}>{error}</Text>}</Shell>;
+/**
+ * Record → Forge → Studio as one screen, no cuts (Eyal, 2026-11-08): the take's ribbon and the record button turn into
+ * the forge, which lands in the real Studio grid; then the Studio's controls rise in around it.
+ * Dev: `/?forge=demo` runs the forge on a made-up take (`&t=3.6` freezes it; `seek(t)` on web drives captures).
+ */
+function Session() {
+  const { audio, error } = useEngine();
+  const reduceMotion = useReducedMotion();
+  const { forge: demo, t: at } = useLocalSearchParams<{ forge?: string; t?: string }>();
+  const frozen = __DEV__ && at !== undefined;
+  const song = useSong((s) => s.song);
+  const setSong = useSong((s) => s.setSong);
+  const setTake = useTake((s) => s.setTake);
+  const [phase, setPhase] = useState<"record" | "forge" | "studio">("record");
+  const st = useStudio(phase === "record" ? null : audio);
+  const root = useRef<El>(null), ribbonEl = useRef<El>(null), buttonEl = useRef<El>(null), gridEl = useRef<El>(null);
+  const [geom, setGeom] = useState<ForgeGeom | null>(null);
+  const ribbon = useSharedValue<RibbonBar[]>([]);
+  const forgeT = useSharedValue(0), start = useSharedValue(-1), forging = useSharedValue(false);
+
+  // the forge's clock (seconds since Stop), from the first forge frame
+  useFrameCallback((f) => {
+    if (!forging.value || frozen) return;
+    if (start.value < 0) start.value = f.timestamp;
+    forgeT.value = (f.timestamp - start.value) / 1000;
+  });
+  useAnimatedReaction(() => forging.value && !frozen && forgeT.value >= FLOW.end, (done, was) => {
+    if (done && !was) scheduleOnRN(setPhase, "studio");
+  });
+  useEffect(() => {
+    if (phase === "studio") forging.set(false);
+  }, [phase, forging]);
+
+  // the forge lands the song's first bar (P2: the take's detected hits)
+  const cells = barCells(song, 0, STUDIO_LANES);
+  const dots: Dot[] = cells.flatMap((row, r) => row.flatMap((v, step) => (v > 0 ? [{ row: r, step, color: LANES_UI[STUDIO_LANES[r]!].color, shape: LANES_UI[STUDIO_LANES[r]!].shape }] : [])));
+  const land = cells.map((row, r) => row.map((_, step) => leaves(step, r) + FLOW.landAfter));
+  const bars = song.bars;
+  const pos = useDerivedValue(() => (forgeT.value >= FLOW.beam[0] && forgeT.value < FLOW.beam[1] ? prog(forgeT.value, FLOW.beam[0], FLOW.beam[1]) / bars : -1));
+
+  const rel = (el: El | null) => {
+    const a = el!.getBoundingClientRect(), r = root.current!.getBoundingClientRect();
+    return { x: a.x - r.x, y: a.y - r.y, w: a.width, h: a.height };
+  };
+  const startForge = () => {
+    if (reduceMotion) { setPhase("studio"); return; }
+    const rb = rel(ribbonEl.current), bt = rel(buttonEl.current);
+    setGeom({ ribbon: { x: rb.x, y: rb.y, w: rb.w }, button: { x: bt.x + bt.w / 2, y: bt.y + bt.h / 2 }, grid: null });
+    start.set(-1);
+    forgeT.set(frozen ? Number(at) : 0);
+    forging.set(true);
+    setPhase("forge");
+  };
+  const onTake = (take: Take | null, mood: Mood) => {
+    setTake(take);
+    setSong(DEMOS[mood]()); // P2 forges the take into the song; until then the mood's demo groove
+    startForge();
+  };
+
+  // the grid's place once Studio has laid out; its panel starts 24 px low (the rise), so take that off
+  useEffect(() => {
+    if (phase !== "forge" || !geom || geom.grid) return;
+    const id = setInterval(() => {
+      if (!gridEl.current) return;
+      const g = rel(gridEl.current);
+      if (g.w <= 0) return;
+      const u = spring(forgeT.get() - FLOW.gridIn, 12, 0.85);
+      setGeom((prev) => prev && { ...prev, grid: { x: g.x, y: g.y - 24 * (1 - u), w: g.w } });
+      clearInterval(id);
+    }, 30);
+    return () => clearInterval(id);
+  });
+
+  // dev: a made-up take straight into the forge (no mic), for screenshots and the side-by-side
+  const demoStarted = useRef(false);
+  useEffect(() => {
+    if (!__DEV__ || demo !== "demo" || !audio || demoStarted.current) return;
+    demoStarted.current = true;
+    ribbon.set(Array.from({ length: RIBBON_BARS }, (_, i) => ({ h: 0.15 + 0.5 * Math.abs(Math.sin(i * 2.3)), lane: i % 4 === 0 ? (i / 4) % 3 : -1 })));
+    const id = setTimeout(() => onTake(null, "boomBap"), 400);
+    Object.assign(globalThis, { seek: (x: number) => forgeT.set(x), FILM: { w: 390, h: 844, duration: FLOW.end } });
+    return () => clearTimeout(id);
+  });
+
+  return (
+    <View ref={root} style={s.root} collapsable={false}>
+      <Stack.Screen options={{ headerShown: false }} />
+      {phase !== "record" && (
+        <View style={StyleSheet.absoluteFill}>
+          <StudioView st={st} forge={phase === "forge" ? { t: forgeT, land, pos } : undefined} gridRef={gridEl} />
+        </View>
+      )}
+      {phase !== "studio" && (audio
+        ? <RecordView audio={audio} ribbon={ribbon} forgeT={phase === "forge" ? forgeT : null} ribbonEl={ribbonEl} buttonEl={buttonEl}
+            onTake={onTake} reduceMotion={reduceMotion} />
+        : <Shell>{error && <Text style={[type.body, s.error]}>{error}</Text>}</Shell>)}
+      {phase === "forge" && geom && <ForgeOverlay t={forgeT} geom={geom} ribbon={ribbon} dots={dots} />}
+      {phase === "forge" && <ForgingLabel t={forgeT} />}
+    </View>
+  );
 }
 
-function Shell({ children, right }: { children?: React.ReactNode; right?: React.ReactNode }) {
+/** "FORGING YOUR BEAT" rises in where the Studio title will be, and out as the title rises in. */
+function ForgingLabel({ t }: { t: SharedValue<number> }) {
+  const insets = useSafeAreaInsets();
+  const anim = useAnimatedStyle(() => {
+    const i = spring(t.value - 0.6 * B, 14, 0.85), o = spring(t.value - FLOW.chrome[0], 14, 0.85);
+    return { opacity: Math.max(0, Math.min(1, i) - o), transform: [{ translateY: 18 * (1 - i) - 18 * o }] };
+  });
+  return (
+    <View style={[s.forgingWrap, { top: insets.top + space.pageTop }]} pointerEvents="none">
+      <Animated.Text style={[type.caps, { color: "#7FF3FF" }, anim]} accessibilityLiveRegion="polite">FORGING YOUR BEAT</Animated.Text>
+    </View>
+  );
+}
+
+function Shell({ children, right, leave }: { children?: ReactNode; right?: ReactNode; leave?: object }) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[s.screen, { paddingTop: insets.top + space.pageTop, paddingBottom: insets.bottom + space.pageBottom }]}>
-      <Stack.Screen options={{ headerShown: false }} />
-      <View style={s.header}>
+      <Animated.View style={[s.header, leave]}>
         <Text style={[type.brand, { color: color.text }]} accessibilityRole="header">GROOVE<Text style={{ color: color.magenta }}>FORGE</Text></Text>
         {right}
-      </View>
+      </Animated.View>
       {children}
     </View>
   );
 }
 
-function Recorder({ audio }: { audio: AudioEngine }) {
-  const router = useRouter();
-  const reduceMotion = useReducedMotion();
+/** Record (docs/design/1-record.dc.html): count in, beatbox + hum one take over the click. `forgeT` set = leaving. */
+function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceMotion }: {
+  audio: AudioEngine; ribbon: SharedValue<RibbonBar[]>; forgeT: SharedValue<number> | null; ribbonEl: RefObject<El | null>;
+  buttonEl: RefObject<El | null>; onTake: (take: Take | null, mood: Mood) => void; reduceMotion: boolean;
+}) {
   const rtlMs = useCalibration((c) => c.rtlMs);
-  const setTake = useTake((t) => t.setTake);
-  const setSong = useSong((t) => t.setSong);
   const [mood, setMood] = useState<Mood>("boomBap");
   const [phase, setPhase] = useState<"idle" | "countIn" | "recording" | "saving">("idle");
   const [bar, setBar] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const orbEl = useRef<El>(null);
+  const [orbDy, setOrbDy] = useState(0); // orb centre → record button centre, for sinking into it
 
   const sr = audio.sampleRate;
   const bpm = DEMOS[mood]().bpm;
@@ -84,7 +189,7 @@ function Recorder({ audio }: { audio: AudioEngine }) {
   const rec = useSharedValue(false);
   const lastBar = useSharedValue(-1);
   const recording = useDerivedValue(() => rec.value && frames.value >= barFrames);
-  const { level, now, sparks, ribbon } = useMicVisuals(audio.clock, frames, beatFrames / 4, recording);
+  const { level, now, sparks } = useMicVisuals(audio.clock, frames, beatFrames / 4, recording, ribbon);
 
   const stop = async () => {
     if (!rec.get()) return;
@@ -94,18 +199,20 @@ function Recorder({ audio }: { audio: AudioEngine }) {
     const { input } = await audio.captureStop();
     await audio.stop();
     if (!take) return;
-    setTake({ input, sampleRate: sr, bpm, mood, countInFrames: barFrames });
-    setSong(DEMOS[mood]()); // P2 forges the take into the song; until then the mood's demo groove
-    setPhase("idle");
-    router.push("/forge");
+    if (orbEl.current && buttonEl.current) {
+      const o = orbEl.current.getBoundingClientRect(), b = buttonEl.current.getBoundingClientRect();
+      setOrbDy(b.y + b.height / 2 - (o.y + o.height / 2));
+    }
+    onTake({ input, sampleRate: sr, bpm, mood, countInFrames: barFrames }, mood);
   };
-  const start = async () => {
+  const begin = async () => {
     setError(null);
     try {
       await audio.stop();
       await audio.setProgram({ instruments: defaultInstruments() });
       await audio.setSong(metronome(bpm));
       lastBar.set(-1);
+      ribbon.set([]);
       rec.set(true);
       setBar(0);
       setPhase("countIn");
@@ -145,43 +252,62 @@ function Recorder({ audio }: { audio: AudioEngine }) {
     return { opacity: on ? 0.55 * (1 - p) : 0, transform: [{ scale: 1 + 0.3 * p }] };
   });
   const dot = useAnimatedStyle(() => {
-    const on = rec.value;
+    const on = rec.value || forgeT !== null; // stays the stop square into the forge
     return { width: withSpring(on ? 30 : 44, SPRING), height: withSpring(on ? 30 : 44, SPRING), borderRadius: withSpring(on ? 8 : 22, SPRING) };
   });
+  // leaving into the forge: chrome rises out, the orb sinks into the record button, ribbon + button hand over to the overlay
+  const leave = useAnimatedStyle(() => {
+    if (!forgeT) return { opacity: 1, transform: [{ translateY: 0 }] };
+    const u = spring(forgeT.value - FLOW.collapse, 14, 0.85);
+    return { opacity: Math.max(0, 1 - u), transform: [{ translateY: -24 * u }] };
+  });
+  const sink = useAnimatedStyle(() => {
+    if (!forgeT) return { opacity: 1, transform: [{ translateY: 0 }, { scale: 1 }] };
+    const m = spring(forgeT.value - FLOW.collapse, 10, 0.82);
+    return { opacity: 1 - prog(m, 0.55, 1), transform: [{ translateY: orbDy * m }, { scale: 1 - 0.8 * m }] };
+  });
+  const handedOver = forgeT ? { opacity: 0 } : null;
 
-  const label = phase === "countIn" ? "COUNT-IN" : phase === "recording" ? `RECORDING · BAR ${bar} OF ${TAKE_BARS}` : phase === "saving" ? "FORGING…" : "TAP TO RECORD";
+  const label = phase === "countIn" ? "COUNT-IN" : phase === "recording" ? `RECORDING · BAR ${bar} OF ${TAKE_BARS}` : phase === "saving" ? `RECORDING · BAR ${TAKE_BARS} OF ${TAKE_BARS}` : "TAP TO RECORD";
   const busy = phase !== "idle";
   return (
-    <Shell right={<Link href="/studio" style={[type.button, s.link]} accessibilityRole="button">Studio</Link>}>
-      <View style={s.chips}>
-        <Chip label="Boom Bap" selected={mood === "boomBap"} onPress={() => setMood("boomBap")} disabled={busy} />
-        <Chip label="Trap" selected={mood === "trap"} onPress={() => setMood("trap")} disabled={busy} />
-        <Text style={[type.stat, s.muted]}>Click {bpm} BPM</Text>
-      </View>
-      <View style={s.center}>
-        <Orb level={level} now={now} sparks={sparks} beat={beat} text={timer} breath={breath} reduceMotion={reduceMotion} />
-        <Text style={[type.caps, s.label]} accessibilityLiveRegion="polite">{label}</Text>
-      </View>
-      <Ribbon bars={ribbon} />
-      <View style={s.recRow}>
-        <View>
-          <Animated.View style={[s.pulse, pulse]} pointerEvents="none" />
-          <Pressable accessibilityRole="button" accessibilityLabel={busy ? "Stop recording" : "Start recording"}
-            onPress={busy ? stop : start} disabled={phase === "saving"} style={s.rec}>
-            <Animated.View style={[s.dot, dot]} />
-          </Pressable>
+    <View style={StyleSheet.absoluteFill} pointerEvents={forgeT ? "none" : "auto"}>
+      <Shell leave={leave} right={<Link href="/studio" style={[type.button, s.link]} accessibilityRole="button">Studio</Link>}>
+        <Animated.View style={[s.chips, leave]}>
+          <Chip label="Boom Bap" selected={mood === "boomBap"} onPress={() => setMood("boomBap")} disabled={busy} />
+          <Chip label="Trap" selected={mood === "trap"} onPress={() => setMood("trap")} disabled={busy} />
+          <Text style={[type.stat, s.muted]}>Click {bpm} BPM</Text>
+        </Animated.View>
+        <View style={s.center}>
+          <Animated.View ref={orbEl} style={[{ alignSelf: "stretch" }, sink]} collapsable={false}>
+            <Orb level={level} now={now} sparks={sparks} beat={beat} text={timer} breath={breath} reduceMotion={reduceMotion} />
+          </Animated.View>
+          <Animated.Text style={[type.caps, s.label, leave]} accessibilityLiveRegion="polite">{label}</Animated.Text>
         </View>
-      </View>
-      <Text style={[type.body, s.hint]}>
-        {error ?? (busy ? "Listening… every hit sparks." : "Beatbox the drums, then hum a bassline, in one take.")}
-      </Text>
-      {__DEV__ && <Link href="/dev/spike" style={[type.stat, s.muted, s.devLink]}>dev: audio spike</Link>}
-    </Shell>
+        <View ref={ribbonEl} style={handedOver} collapsable={false}>
+          <Ribbon bars={ribbon} />
+        </View>
+        <View style={s.recRow}>
+          <View ref={buttonEl} style={handedOver} collapsable={false}>
+            <Animated.View style={[s.pulse, pulse]} pointerEvents="none" />
+            <Pressable accessibilityRole="button" accessibilityLabel={busy ? "Stop recording" : "Start recording"}
+              onPress={busy ? stop : begin} disabled={phase === "saving"} style={s.rec}>
+              <Animated.View style={[s.dot, dot]} />
+            </Pressable>
+          </View>
+        </View>
+        <Animated.Text style={[type.body, s.hint, leave]}>
+          {error ?? (busy ? "Listening… every hit sparks." : "Beatbox the drums, then hum a bassline, in one take.")}
+        </Animated.Text>
+        {__DEV__ && !forgeT && <Link href="/dev/spike" style={[type.stat, s.muted, s.devLink]}>dev: audio spike</Link>}
+      </Shell>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: color.ground, paddingHorizontal: space.page, width: "100%", maxWidth: 520, alignSelf: "center" },
+  root: { flex: 1, backgroundColor: color.ground },
+  screen: { flex: 1, paddingHorizontal: space.page, width: "100%", maxWidth: 520, alignSelf: "center" },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 44 },
   link: { color: color.soft, padding: 12, minHeight: 44 },
   chips: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 18 },
@@ -195,4 +321,5 @@ const s = StyleSheet.create({
   hint: { color: color.muted, textAlign: "center", marginTop: 12, fontSize: 13 },
   error: { color: color.magenta, marginTop: 24 },
   devLink: { textAlign: "center", padding: 12 },
+  forgingWrap: { position: "absolute", left: 0, right: 0, alignItems: "center", paddingHorizontal: space.page },
 });

@@ -49,7 +49,7 @@ export function ForgeCanvas({ scene, t, fixed = false }: { scene: ForgeScene; t:
   );
 }
 
-function paintOf(hex: string, alpha = 1, blur = 0): SkPaint {
+export function paintOf(hex: string, alpha = 1, blur = 0): SkPaint {
   "worklet";
   const p = Skia.Paint();
   p.setAntiAlias(true);

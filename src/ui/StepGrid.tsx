@@ -1,5 +1,5 @@
 import { BlurStyle, Canvas, Picture, Skia, createPicture } from "@shopify/react-native-skia";
-import { useState } from "react";
+import { type ComponentRef, type Ref, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { type SharedValue, useDerivedValue } from "react-native-reanimated";
 import { STEPS_PER_BAR } from "@/song/grid";
@@ -7,6 +7,16 @@ import { color, LANES_UI, motion, radius, TOUCH, type } from "./theme";
 
 type GridLane = keyof typeof LANES_UI;
 const ROW_GAP = 6, CELL_GAP = 3, CELL_H = 38, LABEL_W = 34;
+
+/** A cell's rect inside the grid canvas (`w` = canvas width): shared with the forge's flying dots. */
+export function cellRect(row: number, step: number, w: number) {
+  "worklet";
+  const cw = (w - (STEPS_PER_BAR - 1) * CELL_GAP) / STEPS_PER_BAR;
+  return { x: step * (cw + CELL_GAP), y: row * (TOUCH + ROW_GAP) + (TOUCH - CELL_H) / 2, w: cw, h: CELL_H };
+}
+
+/** Forge mode: a lit cell shows only once its dot has landed (seconds on `t`), flashing as it lands. */
+export interface Reveal { t: SharedValue<number>; land: number[][] }
 const SHORT: Record<GridLane, string> = { kick: "KK", snare: "SN", hatClosed: "HH", hatOpen: "OH", perc: "PC", bass: "BS" };
 
 /**
@@ -15,28 +25,29 @@ const SHORT: Record<GridLane, string> = { kick: "KK", snare: "SN", hatClosed: "H
  * `pos` (0–1 through the loop, −1 stopped): a pure function of (cells, t). Taps and screen readers use a static
  * layer of real buttons on top, ≥ 44 px tall (16 steps can't be 44 px wide on a phone).
  */
-export function StepGrid({ lanes, cells, bar, bars, loopSeconds, pos, reduceMotion, onToggle }: {
+export function StepGrid({ lanes, cells, bar, bars, loopSeconds, pos, reduceMotion, onToggle, reveal, canvasRef }: {
   lanes: readonly GridLane[]; cells: number[][]; bar: number; bars: number; loopSeconds: number;
   pos: SharedValue<number>; reduceMotion: boolean; onToggle: (row: number, step: number) => void;
+  reveal?: Reveal; canvasRef?: Ref<ComponentRef<typeof View>>;
 }) {
   const [w, setW] = useState(0);
   const h = lanes.length * TOUCH + (lanes.length - 1) * ROW_GAP;
   const colors = lanes.map((l) => LANES_UI[l].color);
 
   const picture = useDerivedValue(() => createPicture((canvas) => {
-    const cw = (w - (STEPS_PER_BAR - 1) * CELL_GAP) / STEPS_PER_BAR;
     const p = pos.value;
+    const rt = reveal ? reveal.t.value : 0;
     const inBar = p >= 0 ? p * bars - bar : -1; // 0–1 while the beam is in this bar
     const paint = Skia.Paint();
     const glow = Skia.Paint();
     glow.setMaskFilter(Skia.MaskFilter.MakeBlur(BlurStyle.Normal, 7, true));
     for (let r = 0; r < cells.length; r++) {
-      const y = r * (TOUCH + ROW_GAP) + (TOUCH - CELL_H) / 2;
       for (let s = 0; s < STEPS_PER_BAR; s++) {
-        const x = s * (cw + CELL_GAP);
-        const rect = Skia.RRectXY(Skia.XYWHRect(x, y, cw, CELL_H), radius.cell, radius.cell);
+        const c = cellRect(r, s, w);
+        const rect = Skia.RRectXY(Skia.XYWHRect(c.x, c.y, c.w, c.h), radius.cell, radius.cell);
         const v = cells[r]![s]!;
-        if (v <= 0) {
+        const land = reveal ? reveal.land[r]![s]! : -Infinity;
+        if (v <= 0 || rt < land) {
           paint.setColor(Skia.Color(s % 4 === 0 ? color.cellBeat : color.cellOff));
           canvas.drawRRect(rect, paint);
           continue;
@@ -47,6 +58,7 @@ export function StepGrid({ lanes, cells, bar, bars, loopSeconds, pos, reduceMoti
           const at = (bar * STEPS_PER_BAR + s) / (bars * STEPS_PER_BAR);
           flash = Math.exp(-motion.flashDecay * ((((p - at) % 1) + 1) % 1) * loopSeconds);
         }
+        if (reveal && !reduceMotion) flash = Math.max(flash, Math.exp(-motion.flashDecay * (rt - land))); // landing
         if (flash > 0.02) {
           glow.setColor(Skia.Color(colors[r]!));
           glow.setAlphaf(flash);
@@ -84,7 +96,7 @@ export function StepGrid({ lanes, cells, bar, bars, loopSeconds, pos, reduceMoti
           </Text>
         ))}
       </View>
-      <View style={{ flex: 1, height: h }} onLayout={(e) => setW(e.nativeEvent.layout.width)}>
+      <View ref={canvasRef} style={{ flex: 1, height: h }} onLayout={(e) => setW(e.nativeEvent.layout.width)}>
         {w > 0 && (
           <Canvas style={StyleSheet.absoluteFill}>
             <Picture picture={picture} />

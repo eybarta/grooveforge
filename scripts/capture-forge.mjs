@@ -4,6 +4,8 @@
 // Needs `npm run web` running.
 //   node scripts/capture-forge.mjs stills  → out/forge/t*.png at the spec's still times + SSIM vs docs/motion/stills
 //   node scripts/capture-forge.mjs video   → out/forge/forge.mp4 (60 fps, 2×) + out/forge/side-by-side.mp4
+// The app's continuous flow (Record → Forge → Studio) starts at the film's Stop tap, beat 2:
+//   URL="http://localhost:8081/?forge=demo&t=0" SPEC_OFFSET=1.0714 node scripts/capture-forge.mjs video
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,6 +14,7 @@ import { join } from "node:path";
 const MODE = process.argv[2] ?? "stills";
 const URL_ = process.env.URL ?? "http://localhost:8081/dev/forge?t=0&capture";
 const CHROME = process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const SPEC_OFFSET = process.env.SPEC_OFFSET ?? "0"; // seconds of the spec video before the app's t = 0
 const OUT = "out/forge", PORT = 9334, SCALE = MODE === "video" ? 2 : 1; // spec stills 390×844, spec video 780×1688
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -51,7 +54,7 @@ try {
     const n = Math.round(duration * 60);
     for (let i = 0; i < n; i++) await frameAt(i / 60, join(OUT, "frames", `${String(i).padStart(4, "0")}.png`));
     execFileSync("ffmpeg", ["-y", "-hide_banner", "-loglevel", "error", "-framerate", "60", "-i", join(OUT, "frames/%04d.png"), "-pix_fmt", "yuv420p", join(OUT, "forge.mp4")]);
-    execFileSync("ffmpeg", ["-y", "-hide_banner", "-loglevel", "error", "-i", "docs/motion/forge-transition.mp4", "-i", join(OUT, "forge.mp4"),
+    execFileSync("ffmpeg", ["-y", "-hide_banner", "-loglevel", "error", "-ss", SPEC_OFFSET, "-i", "docs/motion/forge-transition.mp4", "-i", join(OUT, "forge.mp4"),
       "-filter_complex", "[0:v]scale=780:1688[a];[1:v]scale=780:1688[b];[a][b]hstack", "-pix_fmt", "yuv420p", join(OUT, "side-by-side.mp4")]);
     console.log(`${n} frames → ${OUT}/side-by-side.mp4 (left: spec, right: app)`);
   }

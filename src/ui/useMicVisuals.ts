@@ -11,13 +11,13 @@ export interface RibbonBar { h: number; lane: number }
 /**
  * Per-frame mic visuals on the UI thread: the level (instant rise, decay at motion.flashDecay), a spark for each
  * sudden jump in level (a stand-in for P2's hit detection), and the ribbon: one bar per 16th while `recording`,
- * its loudest level, coloured when a spark was born in it. `now` = UI seconds, for shaders.
+ * its loudest level, coloured when a spark was born in it (the caller owns `ribbon`: the forge reads it after the
+ * take). `now` = UI seconds, for shaders.
  */
-export function useMicVisuals(clock: AudioClock | null, frames: SharedValue<number>, sixteenthFrames: number, recording: SharedValue<boolean>) {
+export function useMicVisuals(clock: AudioClock | null, frames: SharedValue<number>, sixteenthFrames: number, recording: SharedValue<boolean>, ribbon: SharedValue<RibbonBar[]>) {
   const level = useSharedValue(0);
   const now = useSharedValue(0);
   const sparks = useSharedValue<Spark[]>([]);
-  const ribbon = useSharedValue<RibbonBar[]>([]);
   const state = useSharedValue({ spark: -1, slot: -1, peak: 0, lane: -1 });
 
   useFrameCallback((f) => {
@@ -33,10 +33,10 @@ export function useMicVisuals(clock: AudioClock | null, frames: SharedValue<numb
     const lane = hit ? Math.floor(Math.random() * 3) : -1;
     if (hit) sparks.value = [...sparks.value.slice(-(SPARKS - 1)), { t0: t, angle: Math.random() * Math.PI * 2, lane }];
     const slot = recording.value && frames.value >= 0 ? Math.floor(frames.value / sixteenthFrames) : -1;
-    if (slot !== s.slot && s.slot >= 0) ribbon.value = [...ribbon.value.slice(-(RIBBON_BARS - 1)), { h: s.peak, lane: s.lane }];
+    if (slot !== s.slot && s.slot >= 0) ribbon.set([...ribbon.get().slice(-(RIBBON_BARS - 1)), { h: s.peak, lane: s.lane }]);
     const same = slot === s.slot;
     state.value = { spark: hit ? t : s.spark, slot, peak: same ? Math.max(s.peak, raw) : raw, lane: hit ? lane : same ? s.lane : -1 };
   });
 
-  return { level, now, sparks, ribbon };
+  return { level, now, sparks };
 }
