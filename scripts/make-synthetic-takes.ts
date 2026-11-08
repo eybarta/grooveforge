@@ -91,8 +91,8 @@ function makeTake(seed: number) {
   };
 }
 
-function write(name: string, bpm: number, take: ReturnType<ReturnType<typeof makeTake>>) {
-  const labels: TakeLabels = { version: 1, performer: "synthetic", device: "make-synthetic-takes.ts", bpm, hits: take.hits, hum: take.hum };
+function write(name: string, bpm: number, take: ReturnType<ReturnType<typeof makeTake>>, kind?: "teach") {
+  const labels: TakeLabels = { version: 1, performer: "synthetic", device: "make-synthetic-takes.ts", ...(kind ? { kind } : {}), bpm, hits: take.hits, hum: take.hum };
   writeFileSync(new URL(`${name}.wav`, OUT), encodeWav(take.samples, SR, "16"));
   writeFileSync(new URL(`${name}.json`, OUT), JSON.stringify(labels, null, 2) + "\n");
   console.log(`${name}: ${take.hits.length} hits, ${take.hum.length} hum segments, ${(take.samples.length / SR).toFixed(2)} s`);
@@ -116,3 +116,11 @@ const trap: [number, LabelledHit["class"], number][] = [
 for (const e of [0, 1, 2, 3, 3.5, 4, 5, 6]) trap.push([e + 0.5, "hatClosed", 0.6]);
 for (let k = 0; k < 6; k++) trap.push([7 + k * 0.125, "hatClosed", 0.5]); // the roll: 1/32 notes, 54 ms apart
 write("synthetic-trap-140", 140, makeTake(140)(140, 2, trap, [{ startBeat: 0, beats: 1.5, midi: 36 }, { startBeat: 2.5, beats: 1, midi: 39 }]));
+
+// The synthetic performer's "teach me your kit" session: 5 of each sound, one per beat at 100 BPM, in class order
+// (the app's teach flow does the same). Scored takes are classified against it, like a user's takes against theirs.
+const teach: [number, LabelledHit["class"], number][] = [];
+(["kick", "snare", "hatClosed", "hatOpen", "perc"] as const).forEach((cls, c) => {
+  for (let i = 0; i < 5; i++) teach.push([c * 5 + i, cls, 0.7 + 0.06 * i]);
+});
+write("synthetic-teach", 100, makeTake(100)(100, 7, teach, []), "teach");

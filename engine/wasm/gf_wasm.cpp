@@ -27,18 +27,22 @@ void gf_loudness(const float* l, const float* r, int frames, float sampleRate, f
   out[0] = static_cast<float>(m.lufs);
   out[1] = static_cast<float>(m.truePeakDb);
 }
+/** Floats per onset row from gf_analyze: [time s, strength, kHitFeatures features] (src/analysis/analyze.ts checks it). */
+int gf_onset_stride() { return 2 + gf::kHitFeatures; }
 /**
  * Analyses a mono take (src/analysis/analyze.ts). ref: what the engine played on the take's timeline, or null.
- * Writes onset rows [time s, strength] into out (at most maxRows); returns how many onsets there are.
+ * Writes onset rows (gf_onset_stride floats each) into out, at most maxRows; returns how many onsets there are.
  */
 int gf_analyze(const float* x, int n, float sampleRate, const float* ref, float* out, int maxRows) {
   gf::AnalysisOptions o;
   o.reference = ref;
   const auto a = gf::analyzeTake(x, n, sampleRate, o);
-  const int count = static_cast<int>(a.onsets.size());
+  const int count = static_cast<int>(a.onsets.size()), stride = gf_onset_stride();
   for (int i = 0; i < std::min(count, maxRows); ++i) {
-    out[2 * i] = static_cast<float>(a.onsets[i].time);
-    out[2 * i + 1] = a.onsets[i].strength;
+    float* row = out + static_cast<size_t>(i) * stride;
+    row[0] = static_cast<float>(a.onsets[i].time);
+    row[1] = a.onsets[i].strength;
+    std::copy(a.onsets[i].features, a.onsets[i].features + gf::kHitFeatures, row + 2);
   }
   return count;
 }

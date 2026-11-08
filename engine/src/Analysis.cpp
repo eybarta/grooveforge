@@ -264,6 +264,71 @@ void removeReference(Stft& x, const float* ref, int n, float takeGain, const std
   }
 }
 
+/** The hit's sound (gf::kHitFeatures, see Analysis.h), from `x` (the normalised take) at sample `at`, up to `end`. */
+void hitFeatures(const std::vector<float>& x, int at, int end, float sr, float* out) {
+  constexpr int M = 1024, H = 256, MEL = 40, CEPS = 13;
+  static thread_local signalsmith::fft::RealFFT<float> fft(M);
+  static thread_local std::vector<float> win = [] {
+    std::vector<float> w(M);
+    for (int i = 0; i < M; ++i) w[i] = 0.5f - 0.5f * std::cos(2.f * static_cast<float>(M_PI) * i / M);
+    return w;
+  }();
+  const int n = static_cast<int>(x.size());
+  const float binHz = sr / M;
+  auto mel = [](float hz) { return 2595.f * std::log10(1.f + hz / 700.f); };
+  const float m0 = mel(30.f), m1 = mel(std::min(16000.f, sr / 2));
+  std::vector<float> edges(MEL + 2);
+  for (int i = 0; i < MEL + 2; ++i) edges[i] = 700.f * (std::pow(10.f, (m0 + (m1 - m0) * i / (MEL + 1)) / 2595.f) - 1.f);
+
+  const int len = std::max(H, std::min(static_cast<int>(0.06f * sr), end - at));  // 60 ms, or up to the next hit
+  const int frames = std::max(1, (len - M / 2) / H + 1);
+  std::vector<float> melAcc(MEL, 0.f), power(M / 2 + 1, 0.f), buf(M);
+  std::vector<std::complex<float>> spec(M / 2);
+  for (int f = 0; f < frames; ++f) {
+    const int start = at + f * H - M / 4;  // the first frame sits mostly on the attack
+    for (int i = 0; i < M; ++i) {
+      const int j = start + i;
+      buf[i] = j >= at && j < std::min(n, at + len) ? x[j] * win[i] : 0.f;
+    }
+    fft.fft(buf.data(), spec.data());
+    for (int k = 1; k < M / 2; ++k) power[k] += std::norm(spec[k]);
+  }
+  float total = 0, centroid = 0, logSum = 0, low = 0, high = 0;
+  int bins = 0;
+  for (int k = 1; k < M / 2; ++k) {
+    const float hz = k * binHz, p = power[k] + 1e-12f;
+    total += p;
+    centroid += p * hz;
+    logSum += std::log(p);
+    ++bins;
+    if (hz < 300) low += p;
+    if (hz > 3000) high += p;
+    for (int b = 0; b < MEL; ++b) {  // triangular mel bands
+      if (hz <= edges[b] || hz >= edges[b + 2]) continue;
+      melAcc[b] += p * (hz < edges[b + 1] ? (hz - edges[b]) / (edges[b + 1] - edges[b]) : (edges[b + 2] - hz) / (edges[b + 2] - edges[b + 1]));
+    }
+  }
+  for (float& m : melAcc) m = std::log(m / frames + 1e-10f);
+  for (int c = 0; c < CEPS; ++c) {  // DCT-II
+    float sum = 0;
+    for (int b = 0; b < MEL; ++b) sum += melAcc[b] * std::cos(static_cast<float>(M_PI) * c * (b + 0.5f) / MEL);
+    out[c] = sum / MEL;
+  }
+  out[13] = std::log2(centroid / total + 1.f);
+  out[14] = std::exp(logSum / bins) / (total / bins);  // flatness: geometric / arithmetic mean of the power
+  auto energy = [&](float a, float b) {
+    double e = 0;
+    for (int i = at + static_cast<int>(a * sr); i < std::min({n, end, at + static_cast<int>(b * sr)}); ++i) e += double(x[i]) * x[i];
+    return e;
+  };
+  out[15] = static_cast<float>(std::log10((energy(0.02f, 0.08f) + 1e-9) / (energy(0.f, 0.02f) + 1e-9)));
+  int crossings = 0;
+  const int zEnd = std::min({n - 1, end, at + static_cast<int>(0.03f * sr)});
+  for (int i = at; i < zEnd; ++i) crossings += (x[i] >= 0) != (x[i + 1] >= 0);
+  out[16] = crossings / std::max(1.f, (zEnd - at) / (0.001f * sr));
+  out[17] = std::log10((low + 1e-9f) / (high + 1e-9f));
+}
+
 }  // namespace
 
 TakeAnalysis analyzeTake(const float* x, int n, float sampleRate, const AnalysisOptions& options) {
@@ -298,8 +363,13 @@ TakeAnalysis analyzeTake(const float* x, int n, float sampleRate, const Analysis
   int last = 0;
   for (int f : pickPeaks(flux, energy, sampleRate)) {
     const int at = refine(env, f * HOP, last, sampleRate);
-    out.onsets.push_back({at / static_cast<double>(sampleRate), flux[f]});
+    out.onsets.push_back({at / static_cast<double>(sampleRate), flux[f], {}});
     last = at + static_cast<int>(0.005f * sampleRate);
+  }
+  for (size_t i = 0; i < out.onsets.size(); ++i) {
+    const int at = static_cast<int>(out.onsets[i].time * sampleRate);
+    const int end = i + 1 < out.onsets.size() ? static_cast<int>(out.onsets[i + 1].time * sampleRate) : n;
+    hitFeatures(out.percussive, at, end, sampleRate, out.onsets[i].features);
   }
   return out;
 }

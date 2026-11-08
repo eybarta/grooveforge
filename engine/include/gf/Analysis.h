@@ -8,9 +8,17 @@ namespace gf {
 constexpr int kStftSize = 2048;
 constexpr int kStftHop = 256;
 
+/**
+ * What a hit sounds like, from its first 60 ms (or up to the next hit): 13 MFCCs (40 mel bands, 30 Hz–16 kHz),
+ * log₂ spectral centroid, spectral flatness, decay (log energy 20–80 ms vs 0–20 ms), zero crossings per ms over
+ * 30 ms, and low (< 300 Hz) vs high (> 3 kHz) energy. src/analysis/classify.ts compares these with the user's kit.
+ */
+constexpr int kHitFeatures = 18;
+
 struct Onset {
   double time;     // seconds: where the hit starts (refined on the percussive waveform)
   float strength;  // SuperFlux peak height (relative loudness of the hit)
+  float features[kHitFeatures];
 };
 
 struct TakeAnalysis {

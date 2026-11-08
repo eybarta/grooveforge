@@ -12,6 +12,8 @@ export interface TakeLabels {
   version: 1;
   performer: string;
   device: string;
+  /** "teach": a "teach me your kit" session (examples of each sound), the kit the performer's takes are classified with. */
+  kind?: "take" | "teach";
   bpm?: number;
   /** Seconds of count-in (clicks) at the start of the WAV: the take's bar 1 starts here (app takes). */
   countInSec?: number;
@@ -51,22 +53,47 @@ export interface HitScore {
 
 /**
  * Onset matching within ±tolerance (default 30 ms, as in the quality bar). Two-pointer greedy on sorted onsets,
- * which gives a maximum matching for 1-D windows (the same counts as mir_eval.onset.f_measure).
+ * which gives a maximum matching for 1-D windows (the same counts as mir_eval.onset.f_measure). Then, without
+ * changing how many are matched, pairs are re-paired where that makes classes agree: when two labels fall within
+ * tolerance of one detection (a kick and a hat 1 ms apart), the detection counts against the label it names, not
+ * against whichever came first in time.
  */
 export function scoreHits(ref: LabelledHit[], est: LabelledHit[], toleranceSec = 0.03): HitScore {
   const r = [...ref].sort((a, b) => a.t - b.t);
   const e = [...est].sort((a, b) => a.t - b.t);
-  let i = 0, j = 0, tp = 0, classCorrect = 0;
+  const near = (a: LabelledHit, b: LabelledHit) => Math.abs(a.t - b.t) <= toleranceSec + 1e-9; // 1 ns: 0.07 − 0.04 > 0.03 in floating point
+  const pairOf = new Array<number>(e.length).fill(-1); // est → ref
+  let i = 0, j = 0;
   while (i < r.length && j < e.length) {
-    const d = e[j]!.t - r[i]!.t;
-    if (Math.abs(d) <= toleranceSec + 1e-9) { // 1 ns slack: 0.07 − 0.04 is 0.030000000000000006 in floating point
-      tp++;
-      if (e[j]!.class === r[i]!.class) classCorrect++;
-      i++;
-      j++;
-    } else if (d < 0) j++;
+    if (near(e[j]!, r[i]!)) pairOf[j++] = i++;
+    else if (e[j]!.t < r[i]!.t) j++;
     else i++;
   }
+  const taken = new Set(pairOf.filter((p) => p >= 0));
+  for (let a = 0; a < e.length; a++) {
+    const ra = pairOf[a]!;
+    if (ra < 0 || e[a]!.class === r[ra]!.class) continue;
+    // an unmatched label it names, within tolerance: take that one instead (the other becomes the miss)
+    const free = r.findIndex((x, k) => !taken.has(k) && x.class === e[a]!.class && near(x, e[a]!));
+    if (free >= 0) {
+      taken.delete(ra);
+      taken.add(free);
+      pairOf[a] = free;
+      continue;
+    }
+    // or swap with a neighbour so both pairs agree (both still within tolerance)
+    for (let b = 0; b < e.length; b++) {
+      const rb = pairOf[b]!;
+      if (b === a || rb < 0 || e[b]!.class === r[rb]!.class) continue;
+      if (e[a]!.class === r[rb]!.class && near(e[a]!, r[rb]!) && near(e[b]!, r[ra]!)) {
+        pairOf[a] = rb;
+        pairOf[b] = ra;
+        break;
+      }
+    }
+  }
+  const tp = pairOf.filter((p) => p >= 0).length;
+  const classCorrect = pairOf.filter((p, k) => p >= 0 && e[k]!.class === r[p]!.class).length;
   return { tp, fp: e.length - tp, fn: r.length - tp, classCorrect };
 }
 

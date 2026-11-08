@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { decodeWav } from "@/audio/wav";
 import { addScores, parseTakeLabels, scoreHits, summarizeScore, type HitScore } from "@/analysis/golden";
-import { DETECTOR, detect } from "./detect.ts";
+import { DETECTOR, detect, goldenKits } from "./detect.ts";
 
 const DIR = new URL("./takes/", import.meta.url);
 const BASELINE = new URL("./baseline.json", import.meta.url);
@@ -12,8 +12,10 @@ const r3 = (x: number) => Math.round(x * 1000) / 1000;
 
 type Scores = ReturnType<typeof summarizeScore>;
 
+// The detector runs the engine's WASM build: CI builds it; locally `npm run build:wasm`.
 describe("golden takes", () => {
   const names = readdirSync(DIR).filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -5)).sort();
+  const kits = goldenKits(); // each performer's "teach me your kit" session
   const perTake: Record<string, Scores> = {};
   let total: HitScore = { tp: 0, fp: 0, fn: 0, classCorrect: 0 };
 
@@ -21,7 +23,10 @@ describe("golden takes", () => {
     const { samples, sampleRate } = decodeWav(readFileSync(new URL(`${name}.wav`, DIR)));
     expect(sampleRate).toBe(48000);
     const labels = parseTakeLabels(JSON.parse(readFileSync(new URL(`${name}.json`, DIR), "utf8")), samples.length / sampleRate, name);
-    const s = scoreHits(labels.hits, detect(samples, sampleRate));
+    if (labels.kind === "teach") return; // a kit, not a take to score
+    const kit = kits.get(labels.performer);
+    expect(kit, `no teach take for performer "${labels.performer}" (golden/README.md)`).toBeDefined();
+    const s = scoreHits(labels.hits, detect(samples, sampleRate, kit!));
     total = addScores(total, s);
     perTake[name] = summarizeScore(s);
   });
