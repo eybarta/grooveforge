@@ -57,6 +57,7 @@ class GfClockHostObject : public jsi::HostObject {
     if (prop == "frame") return jsi::Value(static_cast<double>(clock_->frame.load(std::memory_order_relaxed)));
     if (prop == "loopFrames") return jsi::Value(static_cast<double>(clock_->loopFrames.load(std::memory_order_relaxed)));
     if (prop == "playing") return jsi::Value(clock_->playing.load(std::memory_order_relaxed));
+    if (prop == "inputLevel") return jsi::Value(static_cast<double>(clock_->inputLevel.load(std::memory_order_relaxed)));
     return jsi::Value::undefined();
   }
 

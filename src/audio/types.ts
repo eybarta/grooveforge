@@ -7,6 +7,8 @@ export interface AudioClock {
   readonly frame: number;
   readonly loopFrames: number;
   readonly playing: boolean;
+  /** Mic peak level 0–1, instant attack and ~50 ms release (0 while the mic is closed). */
+  readonly inputLevel: number;
 }
 
 /** Decoded audio for the sampler (r === l for mono). */

@@ -7,6 +7,8 @@ export interface GfClock {
   readonly frame: number;
   readonly loopFrames: number;
   readonly playing: boolean;
+  /** Mic peak meter 0–1 (instant attack, 50 ms release). */
+  readonly inputLevel: number;
 }
 
 /** JSI surface of the C++ GfEngineNodeHostObject (engine/rn/GfEngineNode.h). */

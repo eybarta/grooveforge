@@ -307,7 +307,15 @@ void Engine::process(const float* in, float* outL, float* outR, int frames) {
   for (int done = 0; done < frames; done += Mixer::kBlock) {
     const int n = std::min(Mixer::kBlock, frames - done);
     float mic[Mixer::kBlock];  // read before outL is written: hosts may process in place
-    for (int i = 0; i < n; ++i) mic[i] = in ? in[done + i] : 0.f;
+    float micPeak = 0.f;
+    for (int i = 0; i < n; ++i) {
+      mic[i] = in ? in[done + i] : 0.f;
+      micPeak = std::max(micPeak, std::fabs(mic[i]));
+    }
+    // peak meter for the UI thread: instant attack, 50 ms release, exact zero once inaudible (no subnormals)
+    inMeter_ = std::max(micPeak, inMeter_ * std::exp(-n / (0.05f * sr_)));
+    if (inMeter_ < kQuietLevel) inMeter_ = 0.f;
+    clock_->inputLevel.store(inMeter_, std::memory_order_relaxed);
     for (int i = 0; i < n; ++i) {
       if (playing_ && prog.loopFrames > 0) {
         const int64_t pos = frame_ % prog.loopFrames;

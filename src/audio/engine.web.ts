@@ -48,7 +48,8 @@ async function engineNode(ctx: BaseAudioContext, wasmBytes: ArrayBuffer, onStart
  * between audio callbacks, plus the browser's reported latency to get back to "processed" frames.
  */
 function webClock(ctx: AudioContext) {
-  const state = { startFrame: 0, loopFrames: 0, playing: false };
+  const state = { startFrame: 0, loopFrames: 0, playing: false, meter: null as AnalyserNode | null };
+  const window = new Float32Array(1024); // ~21 ms: the peak over it stands in for the native 50 ms meter
   const clock: AudioClock = {
     get frame() {
       if (!state.playing) return 0;
@@ -58,6 +59,14 @@ function webClock(ctx: AudioContext) {
     },
     get loopFrames() { return state.loopFrames; },
     get playing() { return state.playing; },
+    // the worklet has no shared memory with this thread, so the level comes from an AnalyserNode on the mic
+    get inputLevel() {
+      if (!state.meter) return 0;
+      state.meter.getFloatTimeDomainData(window);
+      let peak = 0;
+      for (let i = 0; i < window.length; i++) peak = Math.max(peak, Math.abs(window[i]!));
+      return peak;
+    },
   };
   return { clock, state };
 }
@@ -120,7 +129,10 @@ export async function createAudioEngine(): Promise<AudioEngine> {
         mic = await navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 },
         });
-        ctx.createMediaStreamSource(mic).connect(live.node);
+        const source = ctx.createMediaStreamSource(mic);
+        source.connect(live.node);
+        clockState.meter = Object.assign(ctx.createAnalyser(), { fftSize: 1024 });
+        source.connect(clockState.meter);
       }
       await ctx.resume();
       await live.call({ type: "play" });

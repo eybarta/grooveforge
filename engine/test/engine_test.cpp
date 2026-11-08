@@ -91,6 +91,20 @@ int main() {
     assert(!clock->playing.load());
   }
 
+  // mic meter: a block's input peak shows at once, then falls (50 ms release) to exact zero in silence
+  {
+    gf::Engine m(kSr);
+    auto clock = m.clock();
+    std::vector<float> hit(128, 0.f);
+    hit[64] = -0.5f;
+    render(m, 128, hit.data());
+    assert(std::fabs(clock->inputLevel.load() - 0.5f) < 1e-6f);
+    render(m, 2400);  // 50 ms of silence: one time constant
+    assert(std::fabs(clock->inputLevel.load() - 0.5f * std::exp(-1.f)) < 0.01f);
+    render(m, 48000);
+    assert(clock->inputLevel.load() == 0.f);
+  }
+
   // polyphony: overlapping notes sum instead of cutting each other
   {
     const float both[] = {0, 0, 0.5f, 60, 4800, -1, 0, 0, 0.5f, 67, 4800, -1};
