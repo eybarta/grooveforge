@@ -36,12 +36,13 @@ export function ForgeOverlay({ t, geom, ribbon, dots }: { t: SharedValue<number>
 
 function drawRibbonAndDots(canvas: SkCanvas, t: number, g: ForgeGeom, list: RibbonBar[], dots: Dot[]) {
   "worklet";
-  const first = RIBBON_BARS - 16; // the take's last bar: its 16ths are where the dots come from
   for (let i = 0; i < RIBBON_BARS; i++) {
     const bar = ribbonBar(i, g.ribbon.w, list);
     const x = g.ribbon.x + bar.x, cy = g.ribbon.y + RIBBON_H / 2;
     const col = spring(t - (FLOW.collapse + i * 0.007), 11, 0.82);
-    const mine = i >= first ? dots.filter((d) => d.step === i - first) : [];
+    // like the film, the strip spans the bar: step j owns bars ⌈j·44/16⌉…, and its first bar becomes its dots
+    const step = Math.floor((i * 16) / RIBBON_BARS);
+    const mine = i === Math.ceil((step * RIBBON_BARS) / 16) ? dots.filter((d) => d.step === step) : [];
     if (!mine.length || col <= 0) {
       const k = Math.max(0, 1 - col);
       if (k > 0.01) canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(x, cy - (bar.h * k) / 2, bar.w, bar.h * k), 3, 3), paintOf(bar.color, bar.alpha));
