@@ -131,5 +131,5 @@ describe.skipIf(!existsSync(WASM) && !process.env.CI)("silence after the music (
     const subnormal = (x: number) => x !== 0 && Math.abs(x) < 1.1754944e-38;
     expect(l!.some(subnormal) || r!.some(subnormal)).toBe(false);
     expect(l!.subarray(20 * SR).every((x) => x === 0) && r!.subarray(20 * SR).every((x) => x === 0)).toBe(true);
-  });
+  }, 60_000); // 25 s of audio: ~6 s on a CI runner, past vitest's 5 s default
 });
