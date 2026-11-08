@@ -92,3 +92,22 @@ export function summarize(est: LagEstimate, sampleRate: number, minScore = MIN_C
 
 /** CLAUDE.md: recorded takes are shifted by the measured round trip before analysis. */
 export const alignTake = (input: Float32Array, rtlFrames: number) => input.subarray(Math.max(0, Math.round(rtlFrames)));
+
+export interface OutputLatency {
+  frames: number;
+  /** false: no calibration yet, so this is the OS/browser figure (CLAUDE.md: 30–48 ms short on Bluetooth and web). */
+  calibrated: boolean;
+}
+
+/**
+ * How far the audible output trails the engine clock, for visuals (CLAUDE.md): the calibrated round trip minus the
+ * small reported input latency; until calibrated, the reported output figures. `reported` = engine.reportedLatency()
+ * (seconds; NaN or missing when the platform doesn't say).
+ */
+export function outputLatency(reported: Record<string, number>, rtlMs: number | null, sampleRate: number): OutputLatency {
+  const sec = (k: string) => (Number.isFinite(reported[k]) ? reported[k]! : 0);
+  if (rtlMs !== null && Number.isFinite(rtlMs)) {
+    return { frames: Math.max(0, rtlMs / 1000 - sec("inputLatency")) * sampleRate, calibrated: true };
+  }
+  return { frames: (sec("outputLatency") + sec("baseLatency")) * sampleRate, calibrated: false };
+}

@@ -1,7 +1,8 @@
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { alignTake } from "@/audio/latency";
+import { useCalibration } from "@/audio/calibration";
+import { alignTake, outputLatency } from "@/audio/latency";
 import { saveWav } from "@/audio/saveWav";
 import { createAudioEngine } from "@/audio/engine";
 import { calibrate, mixTakeWithLoop, takeLevel, verifyAlignment } from "@/audio/spikeRuns";
@@ -21,7 +22,7 @@ export default function Spike() {
   const [route, setRoute] = useState<Route>("wired");
   const [drive, setDrive] = useState(0);
   const [sessionMode, setSessionMode] = useState<SessionMode>("measurement");
-  const [rtlMs, setRtlMs] = useState<number | null>(null);
+  const { rtlMs, setRtlMs } = useCalibration(); // shared: a calibration here also syncs the Studio visuals
   const [take, setTake] = useState<{ input: Float32Array; output: Float32Array } | null>(null);
   const [log, setLog] = useState<string[]>([]);
   // dev hook: grooveforge://spike?auto=render runs the offline render on launch (no share sheet), for headless checks
@@ -168,7 +169,7 @@ export default function Spike() {
       {audio && (
         <LoopBeam
           clock={audio.clock}
-          latencyFrames={outputLatencyFrames(audio, rtlMs)}
+          latencyFrames={outputLatency(audio.reportedLatency(), rtlMs, audio.sampleRate).frames}
           sampleRate={audio.sampleRate}
           onStats={(st) => report("clock", st)}
         />
@@ -178,13 +179,6 @@ export default function Spike() {
       {log.map((l, i) => <Text key={i} style={s.log}>{l}</Text>)}
     </ScrollView>
   );
-}
-
-/** What the listener hears lags the engine by the output latency: measured (RTL − reported input) once calibrated. */
-function outputLatencyFrames(a: AudioEngine, rtlMs: number | null) {
-  const r = a.reportedLatency();
-  const sec = rtlMs !== null ? rtlMs / 1000 - (r.inputLatency || 0) : (r.outputLatency || 0) + (r.baseLatency || 0);
-  return sec * a.sampleRate;
 }
 
 function Btn({ label, onPress, busy, disabled }: { label: string; onPress: () => void; busy: string | null; disabled: boolean }) {

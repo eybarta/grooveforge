@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCalibration } from "@/audio/calibration";
 import { createAudioEngine } from "@/audio/engine";
 import type { Mood } from "@/audio/kit";
+import { outputLatency } from "@/audio/latency";
 import { loadKit } from "@/audio/loadKit";
 import { LOUDNESS_TARGETS, type LoudnessTarget } from "@/audio/master";
 import { DEFAULT_KNOBS, type Knobs } from "@/audio/mix";
@@ -36,6 +38,7 @@ export default function Studio() {
   const [target, setTarget] = useState<LoudnessTarget>("loud");
   const [exporting, setExporting] = useState(false);
   const [sessionMode, setSessionModeState] = useState<SessionMode>("measurement");
+  const rtlMs = useCalibration((c) => c.rtlMs);
   const gainDb = useRef(0); // live master gain: the one the export would use, so live sounds like the export
   const tuning = useRef(0);
 
@@ -205,7 +208,7 @@ export default function Studio() {
       </Pressable>
 
       {audio && (
-        <LoopBeam clock={audio.clock} latencyFrames={((audio.reportedLatency().outputLatency || 0) + (audio.reportedLatency().baseLatency || 0)) * audio.sampleRate}
+        <LoopBeam clock={audio.clock} latencyFrames={outputLatency(audio.reportedLatency(), rtlMs, audio.sampleRate).frames}
           sampleRate={audio.sampleRate} onStats={(st) => console.log("[studio]", JSON.stringify({ step: "clock", ...st }))} />
       )}
       <Text style={s.log}>{status}</Text>

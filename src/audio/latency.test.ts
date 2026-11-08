@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alignTake, estimateLags, findClicks, summarize } from "./latency";
+import { alignTake, estimateLags, findClicks, outputLatency, summarize } from "./latency";
 
 const SR = 48000;
 
@@ -62,5 +62,17 @@ describe("latency estimation", () => {
     const aligned = alignTake(loopback(out, lag, 0.2, 0.005), lag);
     const r = summarize(estimateLags(out, aligned, SR, 0, 0.05), SR);
     expect(r.rtlMs).toBe(0);
+  });
+});
+
+describe("output latency for visuals", () => {
+  it("uses the calibrated round trip minus the reported input latency", () => {
+    expect(outputLatency({ inputLatency: 0.005, outputLatency: 0.01 }, 17, 48000)).toEqual({ frames: 0.012 * 48000, calibrated: true });
+    expect(outputLatency({ inputLatency: NaN }, 40, 48000).frames).toBeCloseTo(0.04 * 48000); // web: input latency unknown
+  });
+
+  it("falls back to the reported output figures, flagged, until calibrated", () => {
+    expect(outputLatency({ outputLatency: 0.02, baseLatency: 0.005 }, null, 48000)).toEqual({ frames: 0.025 * 48000, calibrated: false });
+    expect(outputLatency({ outputLatency: NaN }, NaN, 48000)).toEqual({ frames: 0, calibrated: false }); // a failed calibration
   });
 });
