@@ -73,7 +73,7 @@ export function StepGrid({ lanes, cells, bar, bars, loopSeconds, pos, reduceMoti
       paint.setAlphaf(1);
       canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(x - 1.5, 0, 3, h), 1.5, 1.5), paint);
     }
-  }), [w, h, cells, bar, bars, loopSeconds, reduceMotion, colors]);
+  }));
 
   return (
     <View style={s.wrap}>
