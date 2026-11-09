@@ -276,8 +276,12 @@ void hitFeatures(const std::vector<float>& x, int at, int end, float sr, float* 
   }();
   const int n = static_cast<int>(x.size());
   const float binHz = sr / M;
+  // every spectral feature looks at 30 Hz–16 kHz: what's above depends on the sample rate and the mic (an upsampled
+  // 44.1 kHz recording is empty from 22 kHz up, which moved the flatness by ~0.65 std on the AVP takes)
+  const float topHz = std::min(16000.f, sr / 2);
+  const int top = std::min(M / 2, static_cast<int>(topHz / binHz) + 1);
   auto mel = [](float hz) { return 2595.f * std::log10(1.f + hz / 700.f); };
-  const float m0 = mel(30.f), m1 = mel(std::min(16000.f, sr / 2));
+  const float m0 = mel(30.f), m1 = mel(topHz);
   std::vector<float> edges(MEL + 2);
   for (int i = 0; i < MEL + 2; ++i) edges[i] = 700.f * (std::pow(10.f, (m0 + (m1 - m0) * i / (MEL + 1)) / 2595.f) - 1.f);
 
@@ -296,7 +300,7 @@ void hitFeatures(const std::vector<float>& x, int at, int end, float sr, float* 
   }
   float total = 0, centroid = 0, logSum = 0, low = 0, high = 0;
   int bins = 0;
-  for (int k = 1; k < M / 2; ++k) {
+  for (int k = 1; k < top; ++k) {
     const float hz = k * binHz, p = power[k] + 1e-12f;
     total += p;
     centroid += p * hz;
