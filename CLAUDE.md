@@ -23,6 +23,8 @@ v1 ships ONE flavor: **Hip-hop**, with a **Boom Bap ⇄ Trap** switch.
 - v1 = record → process → edit. Live real-time transformation ("monitor mode") is out of scope for v1.
 - Samples: Eyal has budget for a commissioned/licensed hip-hop kit. Until it arrives use **CC0 sounds only** (e.g. Gogodze Phu Vol II, VCSL, Sonic Pi samples). The 808 is synthesised by our engine. No CC BY-SA (e.g. AVL Drumkits): its no-technical-restrictions clause conflicts with App Store DRM (decided 2026-11-06). Never ship a sample without a licence that allows bundling it in an app; log every sample source in `assets/kits/LICENSES.md`.
 - Export formats: WAV 24-bit now; AAC/M4A with the P5 share/export work. No MP3: every MP3 encoder is LGPL (decided 2026-11-06).
+- **No teaching required** (Eyal, 2026-11-09): hits are classified untaught, from a generic kit built from the AVP beatbox dataset (CC BY 4.0, credited in `assets/kits/LICENSES.md`), the take's own sound clusters, and the user's fixes. "Teach me your kit" is optional tuning.
+- **Take 1 has no metronome by default** (Eyal, 2026-11-09): the user beatboxes freely; the engine finds the tempo, the beats and bar 1. A Click option keeps the count-in.
 
 ## Architecture rules
 - `Song → Track → NoteEvent {tick, lane, velocity, offsetMs, source}` — hits keep their original timing offset (the user's feel); quantize is a blend knob, not destructive.
@@ -30,7 +32,7 @@ v1 ships ONE flavor: **Hip-hop**, with a **Boom Bap ⇄ Trap** switch.
 - Heavy analysis (HPSS, onsets, classification, tempo, pitch) runs off the UI thread (worker / native thread).
 - **Never push playback position through React state.** The engine exposes its clock minus the *measured* output latency (calibrated RTL minus the small reported input latency; never the OS `outputLatency` alone) as a Reanimated shared value; visuals read it every frame.
 - Visualizers are pure functions of `(song, t)`: live playback reads t from the audio clock; video export steps t frame by frame. Same code, always in sync.
-- Recorded takes are shifted by the measured round-trip latency before analysis.
+- Takes recorded over playback (the click, the loop) are shifted by the measured round-trip latency before analysis. A take with nothing playing needs no shift.
 - Mic capture: echo cancellation, noise suppression and auto gain OFF.
 
 ## Design system ("Neon Forge")
@@ -46,7 +48,9 @@ v1 ships ONE flavor: **Hip-hop**, with a **Boom Bap ⇄ Trap** switch.
 | Metric | Target |
 | --- | --- |
 | Onset F1 (±30 ms) | ≥ 0.92 on the golden takes |
-| Hit class accuracy after calibration | ≥ 0.90 |
+| Hit class accuracy, untaught (AVP leave-one-person-out + the golden takes) | ≥ 0.85 |
+| Hit class accuracy, tuned (teach or fixes) | ≥ 0.90 |
+| No-click takes: tempo right (±2 %, right octave) / bar 1 right / hits on the right step | ≥ 9 of 10 / ≥ 8 of 10 / ≥ 95 % |
 | Timing error after quantize | ≤ 5 ms |
 | Export loudness | target ± 0.5 LU, ≤ −1 dBTP |
 | Record → first playback, 8 bars | ≤ 2.5 s on a mid-range Android (until Android returns: measure on the iPhone + web; the iPhone 16 Pro is faster, so treat its numbers as optimistic) |

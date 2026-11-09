@@ -16,13 +16,13 @@ Project rules and decisions: `CLAUDE.md`.
 Keep as reference only: the scheduler idea, `EditMap` (user overrides on top of detected hits), WAV writer, flavor concept.
 
 ## The pipeline
-1. **Capture** — 48 kHz, processing off, count-in, input meter + clip warning, normalise to −3 dBFS before analysis, latency-compensated with the *measured* round trip (see `docs/spike-report.md`).
-2. **Calibration "Teach me your kit"** (15–20 s, once, skippable) — 5× each: kick, snare, closed hat, open hat, rim/click, hum. Per-user embeddings + KNN (research: ~0.87–0.90 accuracy vs ~0.83 for hand features).
+1. **Capture** — 48 kHz, processing off, no click by default (Eyal 2026-11-09; a Click option keeps the count-in), input meter + clip warning, normalise to −3 dBFS before analysis, latency-compensated with the *measured* round trip when something was playing (see `docs/spike-report.md`).
+2. **Calibration "Teach me your kit"** (optional tuning since 2026-11-09; untaught = generic kit from AVP + the take's own sound clusters + the user's fixes; 15–20 s) — 5× each: kick, snare, closed hat, open hat, rim/click, hum. Per-user embeddings + KNN (research: ~0.87–0.90 accuracy vs ~0.83 for hand features).
 3. **Split** — HPSS: percussive → onsets/classifier; harmonic → pitch tracker.
 4. **Onsets** — log-mel SuperFlux-style, adaptive threshold, refine to ±2 ms; keep `offsetMs`.
 5. **Classify** — small CNN embedding (trained on AVP + LVT beatbox datasets, ONNX ~1 MB) + per-user KNN; confidence per hit (low confidence → amber "?" in the grid). Fallback: MFCC + envelope + KNN.
-6. **Tempo/downbeat/swing** — beat-this ONNX (MIT) with autocorrelation fallback; swing from median 16th offsets; half/double toggle; 2/4/8 bars.
-7. **808 bass** — hum pitch (pYIN or CREPE-style) → notes, 16th-quantized, key-snapped, moved to ~C1–C2, slides → glides. No hum → follow-the-kicks fallback.
+6. **Tempo/downbeat/swing** — in the engine: onset-envelope autocorrelation with a mood tempo prior + dynamic-programming beat tracking (Ellis 2007); bar 1 from the kick/snare pattern (beat-this ONNX is MIT but 190 MB: not shippable); swing from median 16th offsets; half/double toggle; 2/4/8 bars.
+7. **808 bass** — hum pitch (pYIN) → notes, 16th-quantized, key-snapped, moved to ~C1–E2, slides → glides. No hum → a mood-specific bassline locked to the kicks (progression, octave pops / long sliding 808s, turnaround).
 8. **Melody layers** — sung pitch → notes (onset + stable pitch), vibrato smoothed, Key snap + Quantize knobs.
 9. **Auto synth** — choose preset from register / note length / density / legato:
    | Sung | Preset |
@@ -32,8 +32,10 @@ Keep as reference only: the scheduler idea, `EditMap` (user overrides on top of 
    | mid, short/choppy | Glass pluck |
    | high, short | Bell |
    | high, sliding | Saw lead w/ glide |
+   | high, held, bright | Supersaw festival lead (detuned unison, filter sweep, wide chorus, long reverb, kick-keyed pump; generic name) |
    | sparse | Dusty piano |
    Extras: octave ±, Harmonize (3rds/5ths), Arp, re-sing a bar.
+   **Keep my voice** (any layer, drums too): the take's own sounds instead of the kit/synth — cleaned (noise gate from the take's silence, low cut, compression), placed on the grid (drum hits as slices; held notes time-stretched with Signalsmith Stretch, MIT), optionally pitch-corrected to key.
 10. **Render** — sampler with velocity layers + round-robin; Hip-hop kit: kick (punch+sub), snare, clap, closed/open hat, rim, shaker, 808 (tuned, glide, saturation). Boom Bap: dusty, swing 55–62 %. Trap: tight, 1/32 hat rolls from fast "ts-ts-ts", long 808. Synth: 2-osc subtractive/wavetable + filter env + unison + chorus + tape sat; 1–2 sampled instruments (Rhodes, piano). 6–8 presets.
 11. **Mix** — per-lane HPF/EQ, transient shaper, 4× oversampled saturation, pan; drum-bus glue, parallel bus, IR reverb send, tempo delay.
 12. **Master/export** — true-peak limiter (−1 dBTP), BS.1770 LUFS (Streaming −14 / Club −9); WAV 24-bit, AAC/M4A (P5; no MP3, every encoder is LGPL), stems, MIDI, 9:16 video.
@@ -63,16 +65,16 @@ Record (audio-reactive orb, count-in rings, live sparks per hit) → **Forge tra
   - auto re-calibrate on route change;
   - re-verify at take start on Bluetooth (drifts ~3 ms) and web (can step by a buffer; watch `MediaStreamTrack` audio stats);
   - UX lands in P3.
-- [ ] HPSS split; onsets; "teach me your kit" calibration flow; MFCC+KNN then ONNX embedding; confidence.
-- [ ] Tempo/downbeat/swing; hum → 808 notes.
-- **Gate:** onset F1 ≥ 0.92, class accuracy ≥ 0.90, record→playback ≤ 2.5 s.
+- [x] HPSS split; onsets; "teach me your kit" calibration flow; MFCC+KNN; confidence; hum → 808 notes.
+- [ ] Re-scope 2026-11-09 (Eyal): untaught classification (generic kit from AVP, take clustering, learn from fixes); no-click recording with tempo/beat/bar-1 detection; musical bassline without a hum. ONNX embedding only if untaught accuracy falls short (ask first).
+- **Gate:** onset F1 ≥ 0.92; class accuracy ≥ 0.85 untaught, ≥ 0.90 tuned; no-click takes: tempo right on ≥ 9/10, bar 1 on ≥ 8/10, ≥ 95 % of hits on the right step; record→playback ≤ 2.5 s.
 
 ### P3 · Neon UI (weeks 5–8, parallel to P2) ✅ passed 2026-11-08 (iOS + web), see `docs/p3-report.md`
 - [x] Visual sync from the measured output latency (not OS `outputLatency`). Tokens, glass surfaces, lane colours+shapes; Record screen (Skia orb shader, sparks); Forge transition matching the motion spec; Studio grid/beam/knobs/A-B; reduced motion.
 - **Gate:** 60 fps on a mid-range phone; transition matches the spec video side by side.
 
 ### P4 · Melody layers (weeks 8–10)
-- [ ] Record-over-loop with latency compensation; sung pitch → notes; synth engine + 6–8 presets; auto-pick; unlimited stacking with freeze.
+- [ ] Record-over-loop with latency compensation; sung pitch → notes; synth engine + 6–8 presets (incl. the supersaw festival lead); auto-pick; unlimited stacking with freeze; "keep my voice" on any layer.
 - **Gate:** 5 testers each stack 3+ layers without help; no audio dropouts.
 
 ### P5 · Make it yours + share (weeks 10–12)
@@ -85,7 +87,9 @@ AI Studio Polish · more flavors (Funk, House, Afro) · live monitor mode (nativ
 ## Sources
 - POC: https://github.com/eybarta/grooveforge
 - AVP classification paper: https://ar5iv.labs.arxiv.org/html/2204.04646
-- beat-this-onnx (MIT): https://huggingface.co/musetric/beat-this-onnx
+- beat-this-onnx (MIT, 190 MB: not used): https://huggingface.co/musetric/beat-this-onnx
+- AVP dataset (CC BY 4.0): https://zenodo.org/records/5036529 · AVP-LVT: https://zenodo.org/records/5578744
+- Signalsmith Stretch (MIT): https://github.com/Signalsmith-Audio/signalsmith-stretch
 - AVL Drumkits (CC BY-SA 3.0): https://www.bandshed.net/avldrumkits/
 - react-native-audio-api: https://npmjs.com/package/react-native-audio-api
 - Stable Audio 2.5 on fal: https://fal.ai/models/fal-ai/stable-audio-25/inpaint
