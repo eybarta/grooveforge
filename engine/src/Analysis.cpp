@@ -377,6 +377,14 @@ TakeAnalysis analyzeTake(const float* x, int n, float sampleRate, const Analysis
     hitFeatures(out.percussive, at, end, sampleRate, out.onsets[i].features);
   }
   out.f0 = pyin(out.harmonic.data(), n, sampleRate);
+  // tempo from every hit (trap's dense hats are its grid), beats where the loud ones are (√ frame energy): SuperFlux's
+  // log bands make a quiet broadband "ts" as strong as a kick, which put a swung groove's beats on its off-beat hats
+  std::vector<float> loud(flux.size());
+  const float maxEnergy = std::max(1e-20f, *std::max_element(energy.begin(), energy.end()));
+  for (size_t f = 0; f < flux.size(); ++f) loud[f] = std::sqrt(energy[f] / maxEnergy);
+  std::vector<double> hitTimes;
+  for (const auto& o : out.onsets) hitTimes.push_back(o.time);
+  out.beats = trackBeats(flux, sampleRate / HOP, options.beatCentreBpm, hitTimes, loud);
   return out;
 }
 

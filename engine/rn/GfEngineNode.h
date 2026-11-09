@@ -111,9 +111,10 @@ class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
     result.setProperty(runtime, "truePeakDb", m.truePeakDb);
     return result;
   }
-  // analyze(take: ArrayBuffer, reference: ArrayBuffer | null) → { onsets: number[], f0: ArrayBuffer }: onset rows
-  // [time s, strength, features…] (2 + gf::kHitFeatures each) and the hum's pitch per gf::kPitchHop (Float32, Hz,
-  // 0 = unvoiced); src/analysis/analyze.ts. Runs here on the JS thread: the UI thread keeps animating.
+  // analyze(take: ArrayBuffer, reference: ArrayBuffer | null, beatCentreBpm?: number)
+  //   → { onsets: number[], f0: ArrayBuffer, beats: number[], bpm: number }: onset rows [time s, strength, features…]
+  // (2 + gf::kHitFeatures each), the hum's pitch per gf::kPitchHop (Float32, Hz, 0 = unvoiced), and the beats (s) and
+  // tempo (gf/Beats.h); src/analysis/analyze.ts. Runs here on the JS thread: the UI thread keeps animating.
   JSI_HOST_FUNCTION_DECL(analyze) {
     auto take = args[0].asObject(runtime).getArrayBuffer(runtime);
     const int n = static_cast<int>(take.size(runtime) / sizeof(float));
@@ -122,6 +123,7 @@ class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
       auto ref = args[1].asObject(runtime).getArrayBuffer(runtime);
       if (static_cast<int>(ref.size(runtime) / sizeof(float)) >= n) options.reference = reinterpret_cast<const float *>(ref.data(runtime));
     }
+    if (count > 2 && args[2].isNumber() && args[2].asNumber() > 0) options.beatCentreBpm = args[2].asNumber();
     const auto a = gf::analyzeTake(reinterpret_cast<const float *>(take.data(runtime)), n, engine_->sampleRate(), options);
     constexpr int stride = 2 + gf::kHitFeatures;
     jsi::Array rows(runtime, a.onsets.size() * stride);
@@ -133,6 +135,10 @@ class GfEngineNodeHostObject : public audioapi::AudioNodeHostObject {
     jsi::Object result(runtime);
     result.setProperty(runtime, "onsets", rows);
     result.setProperty(runtime, "f0", copy(runtime, a.f0.data(), static_cast<int>(a.f0.size())));
+    jsi::Array beats(runtime, a.beats.times.size());
+    for (size_t i = 0; i < a.beats.times.size(); ++i) beats.setValueAtIndex(runtime, i, a.beats.times[i]);
+    result.setProperty(runtime, "beats", beats);
+    result.setProperty(runtime, "bpm", a.beats.bpm);
     return result;
   }
   // loadSample(slot, left: ArrayBuffer, right: ArrayBuffer | null, sampleRate) → boolean

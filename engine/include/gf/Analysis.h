@@ -2,6 +2,8 @@
 // Take analysis (Phase 2): harmonic/percussive split and drum-hit onsets. Control thread / worker: allocates.
 #include <vector>
 
+#include "gf/Beats.h"
+
 namespace gf {
 
 /** STFT used throughout: 2048-point Hann (42.7 ms at 48 kHz), hop 256 (5.3 ms), frames centred on hop × n. */
@@ -25,6 +27,7 @@ struct TakeAnalysis {
   std::vector<float> percussive, harmonic;  // HPSS split of the (normalised) take; same length as the input
   std::vector<Onset> onsets;
   std::vector<float> f0;  // the hum: pYIN on the harmonic part (gf/Pitch.h), Hz per kPitchHop, 0 = unvoiced
+  Beats beats;            // tempo and beats from the percussive onset envelope (gf/Beats.h)
 };
 
 struct AnalysisOptions {
@@ -35,6 +38,8 @@ struct AnalysisOptions {
    * a real hit lands on one.
    */
   const float* reference = nullptr;
+  /** The tempo beat tracking expects (the mood's typical tempo, e.g. 90 Boom Bap, 140 Trap): settles half vs double time. */
+  double beatCentreBpm = 110;
 };
 
 /**

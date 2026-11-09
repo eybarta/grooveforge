@@ -36,10 +36,14 @@ int gf_pitch_hop() { return gf::kPitchHop; }
  * Analyses a mono take (src/analysis/analyze.ts). ref: what the engine played on the take's timeline, or null.
  * Writes onset rows (gf_onset_stride floats each) into out, at most maxRows, and the hum's pitch (Hz, 0 = unvoiced;
  * n / gf_pitch_hop() + 1 floats) into f0 unless it is null; returns how many onsets there are.
+ * Beats (gf/Beats.h): around centreBpm (0 = the engine's default), at most maxBeats times (s) into beats, how many
+ * into *beatCount and the tempo into *bpm, each unless null (callers built before beats pass none of these).
  */
-int gf_analyze(const float* x, int n, float sampleRate, const float* ref, float* out, int maxRows, float* f0) {
+int gf_analyze(const float* x, int n, float sampleRate, const float* ref, float* out, int maxRows, float* f0,
+               float centreBpm, float* beats, int maxBeats, int* beatCount, float* bpm) {
   gf::AnalysisOptions o;
   o.reference = ref;
+  if (centreBpm > 0) o.beatCentreBpm = centreBpm;
   const auto a = gf::analyzeTake(x, n, sampleRate, o);
   const int count = static_cast<int>(a.onsets.size()), stride = gf_onset_stride();
   for (int i = 0; i < std::min(count, maxRows); ++i) {
@@ -49,6 +53,10 @@ int gf_analyze(const float* x, int n, float sampleRate, const float* ref, float*
     std::copy(a.onsets[i].features, a.onsets[i].features + gf::kHitFeatures, row + 2);
   }
   if (f0) std::copy(a.f0.begin(), a.f0.end(), f0);
+  const int nb = static_cast<int>(a.beats.times.size());
+  if (beats) for (int i = 0; i < std::min(nb, maxBeats); ++i) beats[i] = static_cast<float>(a.beats.times[i]);
+  if (beatCount) *beatCount = nb;
+  if (bpm) *bpm = static_cast<float>(a.beats.bpm);
   return count;
 }
 int gf_load_sample(gf::Engine* e, int slot, const float* l, const float* r, int frames, float sampleRate) {
