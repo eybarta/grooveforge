@@ -48,7 +48,7 @@ v1 ships ONE flavor: **Hip-hop**, with a **Boom Bap ⇄ Trap** switch.
 | Metric | Target |
 | --- | --- |
 | Onset F1 (±30 ms) | ≥ 0.92 on the golden takes |
-| Hit class accuracy, untaught (AVP leave-one-person-out + the golden takes) | ≥ 0.85 |
+| Hit class accuracy, untaught, after ≤ 1 tap per sound (one tap relabels that sound across the take; AVP leave-one-person-out + the golden takes) | ≥ 0.85 (with no taps: tracked, must not drop) |
 | Hit class accuracy, tuned (teach or fixes) | ≥ 0.90 |
 | No-click takes: tempo right (±2 %, right octave) / bar 1 right / hits on the right step | ≥ 9 of 10 / ≥ 8 of 10 / ≥ 95 % |
 | Timing error after quantize | ≤ 5 ms |

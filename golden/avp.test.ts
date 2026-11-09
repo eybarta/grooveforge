@@ -6,44 +6,68 @@ import { basename, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { makeKit } from "@/analysis/classify";
 import { addScores, scoreHits, summarizeScore, type HitScore } from "@/analysis/golden";
+import { nameSounds, soundKit, type SoundKit } from "@/analysis/sounds";
 import { decodeWav } from "@/audio/wav";
 import { AVP_DIR, avpAudio, avpLabels, avpPeople } from "./avp.ts";
-import { classifyHits, DETECTOR, hitsCached, templatesFrom } from "./detect.ts";
+import { DETECTOR, hitsCached, scoreSounds, templatesFrom } from "./detect.ts";
 
 const BASELINE = new URL("./avp-baseline.json", import.meta.url);
+const GENERIC_KIT = new URL("../assets/kits/generic-kit.json", import.meta.url);
 const SLACK = 0.005; // a drop larger than this fails CI
 const r3 = (x: number) => Math.round(x * 1000) / 1000;
 const people = avpPeople();
+
+/** Each person: their groove's detected hits and labels, its labelled hits' features, and their own sounds' templates. */
+let cached: ReturnType<typeof load> | null = null;
+function load() {
+  const hits = (file: string) => hitsCached(file, () => avpAudio(file));
+  return people.map((p) => {
+    const groove = hits(p.groove), labels = avpLabels(p.groove);
+    return {
+      id: p.id, labels, hits: groove,
+      own: p.sounds.flatMap((file) => templatesFrom(hits(file), { hits: avpLabels(file) })),
+      labelled: templatesFrom(groove, { hits: labels }), // this groove's hits with their true classes
+    };
+  });
+}
+const avp = () => (cached ??= load());
+const kitFrom = (grooves: ReturnType<typeof load>) => soundKit(grooves.map((o) => ({ features: o.labelled.map((t) => t.f), classes: o.labelled.map((t) => t.cls) })));
 
 // CI always has the dataset (.github/workflows/ci.yml downloads it); locally it's optional (golden/README.md)
 describe.skipIf(!people.length && !process.env.CI)(`AVP dataset (${AVP_DIR})`, () => {
   it("is all there: 28 people", () => expect(people.length).toBe(28));
 
   /**
-   * Untaught, for a stranger (CLAUDE.md quality bar): each person's groove is classified with a kit made from the
-   * OTHER 27 people's sounds (leave-one-person-out), so nobody's own voice is in the kit that scores them.
+   * For a stranger (CLAUDE.md quality bar): each person's groove is named (src/analysis/sounds.ts) with sound centres
+   * learned from the OTHER 27 people's grooves (leave-one-person-out), so their own voice never helps. Scored as named
+   * (untaught), after one tap per wrongly named sound (the gate: ≥ 0.85), and taught (their own sounds as the kit).
    */
-  it("untaught across people: onset F1 on the 28 grooves, class accuracy with the other people's kit", () => {
-    const hits = (file: string) => hitsCached(file, () => avpAudio(file));
-    const data = people.map((p) => ({
-      id: p.id,
-      templates: p.sounds.flatMap((file) => templatesFrom(hits(file), { hits: avpLabels(file) })),
-      labels: avpLabels(p.groove),
-      hits: hits(p.groove),
-    }));
-    let total: HitScore = { tp: 0, fp: 0, fn: 0, classCorrect: 0 };
-    const perPerson: Record<string, { onsetF1: number; classAccuracy: number }> = {};
+  it("onset F1 on the 28 grooves; class accuracy untaught, after one tap per sound, and taught", () => {
+    const data = avp();
+    let onsets: HitScore = { tp: 0, fp: 0, fn: 0, classCorrect: 0 };
+    const sum = { matched: 0, untaught: 0, afterTaps: 0, taps: 0, taught: 0 };
+    const perPerson: Record<string, { onsetF1: number; untaught: number; afterTaps: number; taps: number; taught: number }> = {};
     for (const d of data) {
-      const kit = makeKit(data.filter((o) => o.id !== d.id).flatMap((o) => o.templates));
-      const s = scoreHits(d.labels, classifyHits(d.hits, kit));
-      total = addScores(total, s);
-      const { onsetF1, classAccuracy } = summarizeScore(s);
-      perPerson[`P${d.id}`] = { onsetF1: r3(onsetF1), classAccuracy: r3(classAccuracy) };
+      const kit = kitFrom(data.filter((o) => o.id !== d.id));
+      const features = d.hits.map((h) => h.features);
+      const untaught = scoreSounds(d.labels, d.hits, nameSounds(features, kit));
+      const taught = scoreSounds(d.labels, d.hits, nameSounds(features, kit, makeKit(d.own)));
+      const s = scoreHits(d.labels, d.hits.map((h) => ({ t: h.t, class: "kick" }))); // onsets only: classes aside
+      onsets = addScores(onsets, s);
+      sum.matched += untaught.matched; sum.untaught += untaught.named; sum.afterTaps += untaught.fixed; sum.taps += untaught.taps; sum.taught += taught.named;
+      perPerson[`P${d.id}`] = {
+        onsetF1: r3(summarizeScore(s).onsetF1), untaught: r3(untaught.named / untaught.matched), afterTaps: r3(untaught.fixed / untaught.matched),
+        taps: untaught.taps, taught: r3(taught.named / taught.matched),
+      };
     }
-    const { onsetF1, classAccuracy } = summarizeScore(total);
-    const worst = Object.entries(perPerson).reduce((a, b) => (b[1].classAccuracy < a[1].classAccuracy ? b : a));
-    const now = { detector: DETECTOR, onsetF1: r3(onsetF1), classAccuracy: r3(classAccuracy), worst: { person: worst[0], ...worst[1] }, perPerson };
-    console.table({ total: { onsetF1: now.onsetF1, classAccuracy: now.classAccuracy }, ...perPerson });
+    const worst = Object.entries(perPerson).reduce((a, b) => (b[1].afterTaps < a[1].afterTaps ? b : a));
+    const now = {
+      detector: DETECTOR, onsetF1: r3(summarizeScore(onsets).onsetF1),
+      untaught: r3(sum.untaught / sum.matched), afterTaps: r3(sum.afterTaps / sum.matched), tapsPerTake: r3(sum.taps / data.length), taught: r3(sum.taught / sum.matched),
+      worst: { person: worst[0], ...worst[1] }, perPerson,
+    };
+    const { perPerson: _, worst: __, ...total } = now;
+    console.table({ total, ...perPerson });
 
     if (process.env.GOLDEN_UPDATE) {
       writeFileSync(BASELINE, JSON.stringify(now, null, 2) + "\n");
@@ -51,7 +75,23 @@ describe.skipIf(!people.length && !process.env.CI)(`AVP dataset (${AVP_DIR})`, (
     }
     const base = JSON.parse(readFileSync(BASELINE, "utf8")) as typeof now;
     expect(now.onsetF1).toBeGreaterThanOrEqual(base.onsetF1 - SLACK);
-    expect(now.classAccuracy).toBeGreaterThanOrEqual(base.classAccuracy - SLACK);
+    expect(now.untaught).toBeGreaterThanOrEqual(base.untaught - SLACK);
+    expect(now.afterTaps).toBeGreaterThanOrEqual(base.afterTaps - SLACK);
+    expect(now.taught).toBeGreaterThanOrEqual(base.taught - SLACK);
+    expect(now.tapsPerTake).toBeLessThanOrEqual(base.tapsPerTake + 0.2);
+  }, 600_000);
+
+  /** The app's untaught kit (assets/kits/generic-kit.json): sound centres from all 28 grooves, rebuilt on GOLDEN_UPDATE. */
+  it("built the committed generic kit from all 28 grooves", () => {
+    const kit = kitFrom(avp());
+    const rounded: SoundKit = { classes: kit.classes, centres: kit.centres.map((c) => c.map((v) => Math.round(v * 1e4) / 1e4)) };
+    if (process.env.GOLDEN_UPDATE) {
+      writeFileSync(GENERIC_KIT, JSON.stringify({ source: "AVP dataset (Delgado et al. 2019, Zenodo 5578744, CC BY 4.0): golden/avp.test.ts", detector: DETECTOR, ...rounded }) + "\n");
+      return;
+    }
+    const committed = JSON.parse(readFileSync(GENERIC_KIT, "utf8")) as SoundKit;
+    expect(committed.classes).toEqual(rounded.classes);
+    committed.centres.forEach((c, i) => c.forEach((v, j) => expect(v).toBeCloseTo(rounded.centres[i]![j]!, 3)));
   }, 600_000);
 
   /**

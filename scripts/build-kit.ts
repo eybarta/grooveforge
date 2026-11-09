@@ -188,6 +188,7 @@ async function main() {
     ...Object.values(SOURCES).map((s) => `- **${s.name}**: ${s.licence}: ${s.url}${s.note ? ` ${s.note}` : ""}`),
     "", "| File | Source | Origin | Licence |", "| --- | --- | --- | --- |", ...licenceRows, "",
     "The 808 is synthesised by the engine (no sample).", "",
+    "Also bundled, not a sample: `assets/kits/generic-kit.json`, the untaught hit classifier's sound centres (72 numbers), derived from the **Amateur Vocal Percussion dataset** (A. Delgado, S. McDonald, N. Xu, M. Sandler, 2019): CC BY 4.0: https://zenodo.org/records/5578744 (built by `golden/avp.test.ts`; no audio from it is bundled).", "",
   ].join("\n"));
   const bytes = requires.reduce((sum, r) => sum + statSync(join(OUT, /"(.+?)"/.exec(r)![1]!)).size, 0);
   console.log(`kit: ${requires.length} files, ${(bytes / 1e6).toFixed(2)} MB`);

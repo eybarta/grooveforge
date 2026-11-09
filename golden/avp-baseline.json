@@ -1,124 +1,214 @@
 {
   "detector": "engine-superflux-knn",
   "onsetF1": 0.876,
-  "classAccuracy": 0.499,
+  "untaught": 0.539,
+  "afterTaps": 0.851,
+  "tapsPerTake": 1.679,
+  "taught": 0.66,
   "worst": {
-    "person": "P27",
-    "onsetF1": 0.878,
-    "classAccuracy": 0.197
+    "person": "P13",
+    "onsetF1": 0.971,
+    "untaught": 0.471,
+    "afterTaps": 0.529,
+    "taps": 2,
+    "taught": 0.471
   },
   "perPerson": {
     "P1": {
       "onsetF1": 0.865,
-      "classAccuracy": 0.625
+      "untaught": 0.625,
+      "afterTaps": 0.75,
+      "taps": 1,
+      "taught": 0.5
     },
     "P2": {
       "onsetF1": 0.896,
-      "classAccuracy": 0.467
+      "untaught": 0.467,
+      "afterTaps": 1,
+      "taps": 2,
+      "taught": 0.467
     },
     "P3": {
       "onsetF1": 0.781,
-      "classAccuracy": 0.244
+      "untaught": 0.073,
+      "afterTaps": 0.902,
+      "taps": 3,
+      "taught": 0.146
     },
     "P4": {
       "onsetF1": 0.889,
-      "classAccuracy": 0.313
+      "untaught": 0.344,
+      "afterTaps": 0.875,
+      "taps": 2,
+      "taught": 0.656
     },
     "P5": {
       "onsetF1": 0.747,
-      "classAccuracy": 0.29
+      "untaught": 0.226,
+      "afterTaps": 0.871,
+      "taps": 3,
+      "taught": 0.871
     },
     "P6": {
       "onsetF1": 0.716,
-      "classAccuracy": 0.521
+      "untaught": 0.542,
+      "afterTaps": 0.875,
+      "taps": 2,
+      "taught": 0.708
     },
     "P7": {
       "onsetF1": 0.857,
-      "classAccuracy": 0.429
+      "untaught": 0.571,
+      "afterTaps": 0.952,
+      "taps": 2,
+      "taught": 0.667
     },
     "P8": {
       "onsetF1": 0.969,
-      "classAccuracy": 0.298
+      "untaught": 0.362,
+      "afterTaps": 0.957,
+      "taps": 1,
+      "taught": 0.957
     },
     "P9": {
       "onsetF1": 0.784,
-      "classAccuracy": 0.711
+      "untaught": 0.474,
+      "afterTaps": 0.789,
+      "taps": 1,
+      "taught": 0.658
     },
     "P10": {
       "onsetF1": 0.808,
-      "classAccuracy": 0.35
+      "untaught": 0.8,
+      "afterTaps": 0.9,
+      "taps": 1,
+      "taught": 0.9
     },
     "P11": {
       "onsetF1": 0.758,
-      "classAccuracy": 0.393
+      "untaught": 0.361,
+      "afterTaps": 0.836,
+      "taps": 3,
+      "taught": 0.836
     },
     "P12": {
       "onsetF1": 0.563,
-      "classAccuracy": 0.4
+      "untaught": 0.25,
+      "afterTaps": 0.75,
+      "taps": 3,
+      "taught": 0.45
     },
     "P13": {
       "onsetF1": 0.971,
-      "classAccuracy": 0.529
+      "untaught": 0.471,
+      "afterTaps": 0.529,
+      "taps": 2,
+      "taught": 0.471
     },
     "P14": {
       "onsetF1": 0.824,
-      "classAccuracy": 0.469
+      "untaught": 0.673,
+      "afterTaps": 1,
+      "taps": 1,
+      "taught": 0.714
     },
     "P15": {
       "onsetF1": 0.839,
-      "classAccuracy": 0.423
+      "untaught": 0.346,
+      "afterTaps": 0.731,
+      "taps": 2,
+      "taught": 0.308
     },
     "P16": {
       "onsetF1": 0.943,
-      "classAccuracy": 0.6
+      "untaught": 0.907,
+      "afterTaps": 0.907,
+      "taps": 0,
+      "taught": 0.587
     },
     "P17": {
       "onsetF1": 0.931,
-      "classAccuracy": 0.556
+      "untaught": 0.222,
+      "afterTaps": 0.926,
+      "taps": 2,
+      "taught": 0.704
     },
     "P18": {
       "onsetF1": 0.862,
-      "classAccuracy": 0.508
+      "untaught": 0.475,
+      "afterTaps": 0.885,
+      "taps": 2,
+      "taught": 0.639
     },
     "P19": {
       "onsetF1": 0.898,
-      "classAccuracy": 0.25
+      "untaught": 0.318,
+      "afterTaps": 0.636,
+      "taps": 1,
+      "taught": 0.636
     },
     "P20": {
       "onsetF1": 0.857,
-      "classAccuracy": 0.733
+      "untaught": 0.767,
+      "afterTaps": 0.767,
+      "taps": 0,
+      "taught": 0.567
     },
     "P21": {
       "onsetF1": 0.919,
-      "classAccuracy": 0.51
+      "untaught": 0.343,
+      "afterTaps": 0.882,
+      "taps": 3,
+      "taught": 0.52
     },
     "P22": {
       "onsetF1": 0.966,
-      "classAccuracy": 0.734
+      "untaught": 0.888,
+      "afterTaps": 0.888,
+      "taps": 0,
+      "taught": 0.716
     },
     "P23": {
       "onsetF1": 0.939,
-      "classAccuracy": 0.507
+      "untaught": 0.464,
+      "afterTaps": 0.942,
+      "taps": 2,
+      "taught": 0.826
     },
     "P24": {
       "onsetF1": 0.86,
-      "classAccuracy": 0.5
+      "untaught": 0.675,
+      "afterTaps": 0.8,
+      "taps": 1,
+      "taught": 0.625
     },
     "P25": {
       "onsetF1": 0.958,
-      "classAccuracy": 0.5
+      "untaught": 0.468,
+      "afterTaps": 0.817,
+      "taps": 2,
+      "taught": 0.683
     },
     "P26": {
       "onsetF1": 0.835,
-      "classAccuracy": 0.271
+      "untaught": 0.313,
+      "afterTaps": 0.625,
+      "taps": 3,
+      "taught": 0.563
     },
     "P27": {
       "onsetF1": 0.878,
-      "classAccuracy": 0.197
+      "untaught": 0.541,
+      "afterTaps": 0.787,
+      "taps": 2,
+      "taught": 0.738
     },
     "P28": {
       "onsetF1": 0.968,
-      "classAccuracy": 0.787
+      "untaught": 0.88,
+      "afterTaps": 0.88,
+      "taps": 0,
+      "taught": 0.733
     }
   }
 }

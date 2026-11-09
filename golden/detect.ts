@@ -5,7 +5,9 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { analyzeTake, type DetectedHit } from "../src/analysis/analyze.ts";
 import { classify, makeKit, type Kit, type Template } from "../src/analysis/classify.ts";
-import type { LabelledHit, TakeLabels } from "../src/analysis/golden.ts";
+import { matchHits, type LabelledHit, type TakeLabels } from "../src/analysis/golden.ts";
+import type { Sound } from "../src/analysis/sounds.ts";
+import type { DrumLane } from "../src/song/types.ts";
 import { instantiateEngine, type GfWasm } from "../src/audio/wasmEngine.ts";
 import { decodeWav } from "../src/audio/wav.ts";
 
@@ -69,3 +71,26 @@ export function goldenKits(): Map<string, Kit> {
 export const classifyHits = (hits: DetectedHit[], kit: Kit): LabelledHit[] => hits.map((h) => ({ t: h.t, class: classify(h.features, kit).cls }));
 
 export const detect = (samples: Float32Array, sampleRate: number, kit: Kit) => classifyHits(findHits(samples, sampleRate), kit);
+
+/**
+ * Sound naming (src/analysis/sounds.ts) scored the way it's used (CLAUDE.md quality bar), over the hits matched to a
+ * label (±30 ms, like scoreHits): how many are right as named, how many after the user taps one wrong hit per wrongly
+ * named sound (relabelling its whole group to what most of it really is), and the taps that took.
+ */
+export function scoreSounds(labels: LabelledHit[], hits: DetectedHit[], sounds: Sound[]) {
+  const { pairs } = matchHits(labels, hits.map((h, i) => ({ t: h.t, class: sounds[i]!.cls, group: sounds[i]!.group })));
+  const groups = new Map<number, { named: DrumLane; truth: Map<DrumLane, number> }>();
+  for (const [l, e] of pairs) {
+    const g = groups.get(e.group) ?? { named: e.class, truth: new Map<DrumLane, number>() };
+    g.truth.set(l.class, (g.truth.get(l.class) ?? 0) + 1);
+    groups.set(e.group, g);
+  }
+  let named = 0, fixed = 0, taps = 0;
+  for (const { named: cls, truth } of groups.values()) {
+    const [most, count] = [...truth.entries()].sort((a, b) => b[1] - a[1])[0]!;
+    named += truth.get(cls) ?? 0;
+    fixed += count;
+    if (cls !== most) taps++;
+  }
+  return { matched: pairs.length, named, fixed, taps };
+}
