@@ -24,12 +24,33 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends sox libsox-fmt-base
       - name: Build engine → WASM
         run: npm run build:wasm
+      - name: AVP beatbox dataset (Zenodo 5578744, CC BY 4.0; golden/avp.ts), cached
+        id: avp
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/avp-lvt
+          key: avp-lvt-3cc38636623e2861cbda145d889e959a
+      - name: Download the AVP dataset
+        if: steps.avp.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/avp-lvt" && cd "$RUNNER_TEMP/avp-lvt"
+          curl -sSfL -o avp.zip "https://zenodo.org/records/5578744/files/AVP-LVT_Dataset.zip?download=1"
+          echo "3cc38636623e2861cbda145d889e959a  avp.zip" | md5sum -c -
+          unzip -q avp.zip -x '__MACOSX/*' && rm avp.zip
+      - name: Analysed hits, cached per engine build (golden/detect.ts hitsCached)
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/gf-hits
+          key: gf-hits-${{ hashFiles('public/gf-engine.wasm') }}
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Lint
         run: npx expo lint
-      - name: Unit + golden tests (song model, latency, WAV, WASM parity, export bar, scorer, golden floors)
+      - name: Unit + golden tests (song model, latency, WAV, WASM parity, export bar, scorer, golden + AVP floors)
         run: npx vitest run
+        env:
+          AVP_DIR: ${{ runner.temp }}/avp-lvt/AVP-LVT_Dataset/AVP_Dataset/Personal
+          GF_CACHE: ${{ runner.temp }}/gf-hits
       - name: C++ engine tests
         run: npm run test:engine
       - name: Web bundle

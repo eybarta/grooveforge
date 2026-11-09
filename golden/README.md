@@ -65,6 +65,23 @@ Or send me the WAVs and the exported label files and I'll import them.
 - `hum`: hummed bass segments for the 808 tracker; `midi` optional; `hum: []` if there's no hum.
 - `bpm`, `countInSec`: optional (app takes have both: bar 1 starts at `countInSec`).
 
+## Other people: the AVP dataset
+
+`golden/avp.test.ts` scores strangers, not just Eyal. It uses the Amateur Vocal Percussion dataset (Delgado et al.
+2019; [Zenodo 5578744](https://zenodo.org/records/5578744), CC BY 4.0): 28 people with little or no beatbox
+experience, each with one file per sound and one improvised groove (no click), every hit labelled.
+- **Onset F1** on the 28 grooves.
+- **Untaught class accuracy:** each person is scored with a kit built from the **other 27** people's sounds
+  (leave-one-person-out), so their own voice never helps. Floors are in `golden/avp-baseline.json`, worst person included.
+- **44.1 vs 48 kHz:** the same hits keep their features when sox resamples the dataset to the phones' rate.
+
+**Where the data lives:** not in the repo (169 MB). CI downloads it (md5-checked, cached). Locally, unpack
+`AVP-LVT_Dataset.zip` into `~/Projects/grooveforge-data/avp-lvt/` (or point `AVP_DIR` at its `AVP_Dataset/Personal`);
+without it the test is skipped.
+
+**Speed:** analysed hits are cached per engine build in `~/.cache/grooveforge/hits` (`GF_CACHE`). The first run takes
+~3 min, later runs seconds.
+
 ## Commands
 
 - `npm test`: scores all takes against `baseline.json`.

@@ -1,0 +1,124 @@
+{
+  "detector": "engine-superflux-knn",
+  "onsetF1": 0.876,
+  "classAccuracy": 0.499,
+  "worst": {
+    "person": "P27",
+    "onsetF1": 0.878,
+    "classAccuracy": 0.197
+  },
+  "perPerson": {
+    "P1": {
+      "onsetF1": 0.865,
+      "classAccuracy": 0.625
+    },
+    "P2": {
+      "onsetF1": 0.896,
+      "classAccuracy": 0.467
+    },
+    "P3": {
+      "onsetF1": 0.781,
+      "classAccuracy": 0.244
+    },
+    "P4": {
+      "onsetF1": 0.889,
+      "classAccuracy": 0.313
+    },
+    "P5": {
+      "onsetF1": 0.747,
+      "classAccuracy": 0.29
+    },
+    "P6": {
+      "onsetF1": 0.716,
+      "classAccuracy": 0.521
+    },
+    "P7": {
+      "onsetF1": 0.857,
+      "classAccuracy": 0.429
+    },
+    "P8": {
+      "onsetF1": 0.969,
+      "classAccuracy": 0.298
+    },
+    "P9": {
+      "onsetF1": 0.784,
+      "classAccuracy": 0.711
+    },
+    "P10": {
+      "onsetF1": 0.808,
+      "classAccuracy": 0.35
+    },
+    "P11": {
+      "onsetF1": 0.758,
+      "classAccuracy": 0.393
+    },
+    "P12": {
+      "onsetF1": 0.563,
+      "classAccuracy": 0.4
+    },
+    "P13": {
+      "onsetF1": 0.971,
+      "classAccuracy": 0.529
+    },
+    "P14": {
+      "onsetF1": 0.824,
+      "classAccuracy": 0.469
+    },
+    "P15": {
+      "onsetF1": 0.839,
+      "classAccuracy": 0.423
+    },
+    "P16": {
+      "onsetF1": 0.943,
+      "classAccuracy": 0.6
+    },
+    "P17": {
+      "onsetF1": 0.931,
+      "classAccuracy": 0.556
+    },
+    "P18": {
+      "onsetF1": 0.862,
+      "classAccuracy": 0.508
+    },
+    "P19": {
+      "onsetF1": 0.898,
+      "classAccuracy": 0.25
+    },
+    "P20": {
+      "onsetF1": 0.857,
+      "classAccuracy": 0.733
+    },
+    "P21": {
+      "onsetF1": 0.919,
+      "classAccuracy": 0.51
+    },
+    "P22": {
+      "onsetF1": 0.966,
+      "classAccuracy": 0.734
+    },
+    "P23": {
+      "onsetF1": 0.939,
+      "classAccuracy": 0.507
+    },
+    "P24": {
+      "onsetF1": 0.86,
+      "classAccuracy": 0.5
+    },
+    "P25": {
+      "onsetF1": 0.958,
+      "classAccuracy": 0.5
+    },
+    "P26": {
+      "onsetF1": 0.835,
+      "classAccuracy": 0.271
+    },
+    "P27": {
+      "onsetF1": 0.878,
+      "classAccuracy": 0.197
+    },
+    "P28": {
+      "onsetF1": 0.968,
+      "classAccuracy": 0.787
+    }
+  }
+}

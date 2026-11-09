@@ -1,5 +1,8 @@
 /// <reference types="node" />
-import { readdirSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import { analyzeTake, type DetectedHit } from "../src/analysis/analyze.ts";
 import { classify, makeKit, type Kit, type Template } from "../src/analysis/classify.ts";
 import type { LabelledHit, TakeLabels } from "../src/analysis/golden.ts";
@@ -20,16 +23,36 @@ const wasm = () => (engine ??= instantiateEngine(new WebAssembly.Module(readFile
 export const analyze = (samples: Float32Array, sampleRate: number) => analyzeTake(wasm(), samples, sampleRate);
 export const findHits = (samples: Float32Array, sampleRate: number): DetectedHit[] => analyze(samples, sampleRate).hits;
 
-/** A teach session's templates: each labelled example, with the features of the detected hit at it (±30 ms). */
-export function kitFrom(samples: Float32Array, sampleRate: number, labels: TakeLabels): Kit {
+const CACHE = process.env.GF_CACHE ?? join(homedir(), ".cache", "grooveforge", "hits");
+let build: string | null = null;
+
+/**
+ * findHits, cached on disk per engine build (the WASM's hash) and `key` (what the audio is, e.g. its path): analysis
+ * here costs ~80 ms per second of audio, and the AVP dataset is 33 minutes of it.
+ */
+export function hitsCached(key: string, load: () => { samples: Float32Array; sampleRate: number }): DetectedHit[] {
+  build ??= createHash("sha1").update(readFileSync(WASM)).digest("hex").slice(0, 16);
+  const file = join(CACHE, build, `${createHash("sha1").update(key).digest("hex")}.json`);
+  if (existsSync(file)) return JSON.parse(readFileSync(file, "utf8")) as DetectedHit[];
+  const { samples, sampleRate } = load();
   const hits = findHits(samples, sampleRate);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify(hits));
+  return hits;
+}
+
+/** Templates from labelled hits: each one with the features of the detected hit at it (±30 ms). */
+export function templatesFrom(hits: DetectedHit[], labels: Pick<TakeLabels, "hits">): Template[] {
   const templates: Template[] = [];
   for (const l of labels.hits) {
     const h = hits.find((x) => Math.abs(x.t - l.t) <= 0.03);
     if (h) templates.push({ cls: l.class, f: h.features });
   }
-  return makeKit(templates);
+  return templates;
 }
+
+/** A teach session's kit. */
+export const kitFrom = (samples: Float32Array, sampleRate: number, labels: TakeLabels): Kit => makeKit(templatesFrom(findHits(samples, sampleRate), labels));
 
 /** Every performer's kit from their teach take in golden/takes (name → kit). */
 export function goldenKits(): Map<string, Kit> {
