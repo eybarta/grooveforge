@@ -67,8 +67,9 @@ export interface AudioEngine {
   /**
    * The engine's take analysis (src/analysis/analyze.ts): hits with their strength and features, and the hum's pitch,
    * off the UI thread (native: the JS thread; web: a worker). `reference` = what the engine played (output capture), take-aligned.
+   * `beatCentreBpm`: the tempo its beats are expected around (the mood's).
    */
-  analyze(take: Float32Array, reference?: Float32Array): Promise<TakeAnalysis>;
+  analyze(take: Float32Array, reference?: Float32Array, beatCentreBpm?: number): Promise<TakeAnalysis>;
   /** EBU R128 integrated loudness + true peak (libebur128 in the engine). */
   loudness(channels: Float32Array[]): Promise<Measured>;
   close(): Promise<void>;

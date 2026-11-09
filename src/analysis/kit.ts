@@ -11,10 +11,27 @@ export const TEACH_EACH = 5;
 /** At least this many clear examples of a sound to use the kit. */
 export const TEACH_MIN = 3;
 
-/** The user's taught kit (templates for src/analysis/classify.ts), kept across launches. */
-export const useKit = create<{ templates: Template[] | null; taughtAt: string | null; setTemplates: (t: Template[]) => void }>()(
+/** Examples kept per sound from fixes (the newest win): enough for k-NN, small enough to stay quick. */
+export const LEARN_MAX = 24;
+
+/**
+ * The user's own kit (templates for src/analysis/classify.ts), kept across launches: taught ("teach me your kit"),
+ * and learned from every fix in the Studio (one tap relabels a sound: its hits become examples of that lane).
+ */
+export const useKit = create<{
+  templates: Template[] | null; taughtAt: string | null;
+  setTemplates: (t: Template[]) => void;
+  learn: (cls: DrumLane, features: number[][]) => void;
+}>()(
   persist(
-    (set) => ({ templates: null, taughtAt: null, setTemplates: (templates) => set({ templates, taughtAt: new Date().toISOString() }) }),
+    (set) => ({
+      templates: null, taughtAt: null,
+      setTemplates: (templates) => set({ templates, taughtAt: new Date().toISOString() }),
+      learn: (cls, features) => set((s) => {
+        const mine = [...(s.templates ?? []).filter((t) => t.cls === cls), ...features.map((f) => ({ cls, f }))].slice(-LEARN_MAX);
+        return { templates: [...(s.templates ?? []).filter((t) => t.cls !== cls), ...mine] };
+      }),
+    }),
     { name: "gf-kit", storage: createJSONStorage(() => persistStorage) },
   ),
 );

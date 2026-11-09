@@ -21,6 +21,8 @@ export interface NoteEvent {
   glideFrom?: number;
   /** Detected hits: how sure the classifier was of the lane (0–1); low = the amber "?" in the Studio. */
   confidence?: number;
+  /** Detected hits: which of the take's sounds this is (src/analysis/sounds.ts); fixing one hit's lane fixes them all. */
+  sound?: number;
 }
 
 export interface Track {

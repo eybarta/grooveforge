@@ -1,4 +1,4 @@
-import { Link, Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Link, Redirect, Stack, useLocalSearchParams } from "expo-router";
 import { type ComponentRef, type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
@@ -13,6 +13,7 @@ import { useKit } from "@/analysis/kit";
 import { useCalibration, useRoute } from "@/audio/calibration";
 import type { Mood } from "@/audio/kit";
 import { alignTake, outputLatency } from "@/audio/latency";
+import { loadKitOnce } from "@/audio/loadKit";
 import { saveWav } from "@/audio/saveWav";
 import { type Take, useTake } from "@/audio/take";
 import type { AudioEngine } from "@/audio/types";
@@ -36,7 +37,8 @@ import { usePlayhead } from "@/ui/usePlayhead";
 
 // dev hook: `EXPO_PUBLIC_SPIKE_AUTO=render npx expo start` opens the spike and runs the offline render headlessly
 const SPIKE_AUTO = process.env.EXPO_PUBLIC_SPIKE_AUTO;
-const TAKE_BARS = 4; // after a one-bar count-in (P2 makes 2/4/8 a choice)
+const TAKE_BARS = 4; // with the click: after a one-bar count-in
+const MAX_FREE_SEC = 45; // with no click the user stops; this stops a forgotten take
 const HOLD = FLOW.flight - 0.05; // the forge waits here for the take's analysis if it isn't done yet
 const SPRING = { stiffness: 144, damping: 19.2, mass: 1 }; // the film's ω = 12, ζ = 0.8
 type El = ComponentRef<typeof View>;
@@ -62,6 +64,9 @@ function Session() {
   const [phase, setPhase] = useState<"record" | "forge" | "studio">("record");
   const st = useStudio(phase === "record" ? null : audio);
   useRoute(audio);
+  useEffect(() => {
+    if (audio) loadKitOnce(audio).catch(() => {}); // now, not after Stop (useStudio reports a failure when it waits on it)
+  }, [audio]);
   const root = useRef<El>(null), ribbonEl = useRef<El>(null), buttonEl = useRef<El>(null), gridEl = useRef<El>(null);
   const [geom, setGeom] = useState<ForgeGeom | null>(null);
   const ribbon = useSharedValue<RibbonBar[]>([]);
@@ -123,15 +128,18 @@ function Session() {
   };
   const hear = async (take: Take) => {
     try {
-      const { song: heard, analysis, analysedMs, rtl } = await songFromTake(audio!, take, useKit.getState().templates, useCalibration.getState().rtlMs);
+      const { song: forged, analysis, analysedMs, rtl, heard } = await songFromTake(audio!, take, useKit.getState().templates, useCalibration.getState().rtlMs);
       const stored = useCalibration.getState().rtlMs;
-      if (rtl.from === "count-in") useCalibration.getState().setRtlMs(rtl.ms); // a fresh measurement of this route (drift)
-      setSong(heard);
-      const notes = Object.fromEntries(heard.tracks.map((t) => [t.kind, t.notes.length]));
+      if (rtl?.from === "count-in") useCalibration.getState().setRtlMs(rtl.ms); // a fresh measurement of this route (drift)
+      useTake.getState().setHeard(heard);
+      setSong(forged);
+      const notes = Object.fromEntries(forged.tracks.map((t) => [t.kind, t.notes.length]));
+      const unsure = forged.tracks[0]!.notes.filter((n) => (n.confidence ?? 1) < 0.3).length;
       console.log("[take]", JSON.stringify({
         step: "heard", platform: audio!.platform, msSinceStop: Math.round(performance.now() - take.stoppedAt), analysedMs: Math.round(analysedMs),
-        seconds: Math.round((take.input.length / take.sampleRate) * 10) / 10, hits: analysis.hits.length, notes, bars: heard.bars, swing: Math.round(heard.swing * 100) / 100,
-        rtl: { ms: Math.round(rtl.ms * 10) / 10, from: rtl.from, stored: stored === null ? null : Math.round(stored * 10) / 10, route: useCalibration.getState().route },
+        seconds: Math.round((take.input.length / take.sampleRate) * 10) / 10, click: take.click, hits: analysis.hits.length, notes, unsure,
+        sounds: heard.sounds.length, bpm: forged.bpm, beats: heard.beats.length, bar1: heard.bar1, bars: forged.bars, swing: Math.round(forged.swing * 100) / 100,
+        rtl: rtl && { ms: Math.round(rtl.ms * 10) / 10, from: rtl.from, stored: stored === null ? null : Math.round(stored * 10) / 10, route: useCalibration.getState().route },
       }));
     } catch (e) {
       console.warn("[take]", JSON.stringify({ step: "analysis failed", error: String(e) }));
@@ -155,13 +163,14 @@ function Session() {
     return () => clearInterval(id);
   });
 
-  // dev: forge any audio as a take, no mic (web console / remote checks): __gfForgeTake(samples, bpm, mood), the
-  // samples starting with the one-bar count-in, the click already out
+  // dev: forge any audio as a take, no mic (web console / remote checks): __gfForgeTake(samples, bpm, mood, click):
+  // with click, the samples start with the one-bar count-in (the click already out); without, it's a free take
   useEffect(() => {
     if (!__DEV__ || !audio) return;
     Object.assign(globalThis, {
-      __gfForgeTake: (input: Float32Array, bpm: number, mood: Mood) => onTake({
-        input, output: new Float32Array(input.length), stoppedAt: performance.now(), sampleRate: audio.sampleRate, bpm, mood, countInFrames: (240 / bpm) * audio.sampleRate,
+      __gfForgeTake: (input: Float32Array, bpm: number, mood: Mood, click = true) => onTake({
+        input, output: new Float32Array(input.length), stoppedAt: performance.now(), sampleRate: audio.sampleRate, bpm, mood, click,
+        countInFrames: click ? (240 / bpm) * audio.sampleRate : 0,
       }, mood),
     });
   });
@@ -211,8 +220,8 @@ function SaveTake({ audio }: { audio: AudioEngine }) {
       const now = new Date();
       const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
       const name = takeFileName({ mood: take.mood, bpm: take.bpm, countInSec: take.countInFrames / take.sampleRate, route, stamp });
-      const aligned = rtlMs !== null && Number.isFinite(rtlMs);
-      const samples = aligned ? alignTake(take.input, (rtlMs! / 1000) * take.sampleRate) : take.input;
+      const aligned = !take.click || (rtlMs !== null && Number.isFinite(rtlMs)); // nothing played during a free take
+      const samples = take.click && aligned ? alignTake(take.input, (rtlMs! / 1000) * take.sampleRate) : take.input;
       await saveWav(encodeWav(samples, take.sampleRate), `${name}${aligned ? "" : "-unaligned"}.wav`);
       setNote(aligned ? "Saved." : "Saved, but not latency-aligned: calibrate sync first for golden takes.");
     } catch (e) {
@@ -253,16 +262,18 @@ function Shell({ children, right, leave }: { children?: ReactNode; right?: React
   );
 }
 
-/** Record (docs/design/1-record.dc.html): count in, beatbox + hum one take over the click. `forgeT` set = leaving. */
+/**
+ * Record (docs/design/1-record.dc.html): beatbox + hum one take, freely (no click, the default: Eyal 2026-11-09; the
+ * engine finds the tempo), or with the Click chip on, counted in over the metronome. `forgeT` set = leaving.
+ */
 function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceMotion, geom }: {
   audio: AudioEngine; ribbon: SharedValue<RibbonBar[]>; forgeT: SharedValue<number> | null; ribbonEl: RefObject<El | null>;
   buttonEl: RefObject<El | null>; onTake: (take: Take | null, mood: Mood) => void; reduceMotion: boolean;
   geom: ForgeGeom | null;
 }) {
   const rtlMs = useCalibration((c) => c.rtlMs);
-  const router = useRouter();
-  const taught = useKit((k) => k.templates !== null);
   const [mood, setMood] = useState<Mood>("boomBap");
+  const [click, setClick] = useState(false);
   const [phase, setPhase] = useState<"idle" | "countIn" | "recording" | "saving">("idle");
   const [bar, setBar] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -281,32 +292,34 @@ function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceM
   const { frames } = usePlayhead(audio.clock, outputLatency(audio.reportedLatency(), rtlMs, sr).frames, sr);
   const rec = useSharedValue(false);
   const lastBar = useSharedValue(-1);
-  const recording = useDerivedValue(() => rec.value && frames.value >= barFrames);
+  const lead = click ? barFrames : 0; // the count-in, with the click
+  const recording = useDerivedValue(() => rec.value && frames.value >= lead);
   const { level, now, sparks } = useMicVisuals(audio.clock, frames, beatFrames / 4, recording, ribbon);
 
   const stop = async () => {
     if (!rec.get()) return;
-    const take = lastBar.get() >= 1; // stopping during the count-in throws the take away
+    // stopping during the count-in, or a free take under a second, throws the take away
+    const take = click ? lastBar.get() >= 1 : frames.get() >= sr;
     rec.set(false);
     setPhase(take ? "saving" : "idle");
     const stoppedAt = performance.now();
     const { input, output } = await audio.captureStop();
     await audio.stop();
     if (!take) return;
-    onTake({ input, output, stoppedAt, sampleRate: sr, bpm, mood, countInFrames: barFrames }, mood);
+    onTake({ input, output, stoppedAt, sampleRate: sr, bpm, mood, click, countInFrames: lead }, mood);
   };
   const begin = async () => {
     setError(null);
     try {
       await audio.stop();
       await audio.setProgram({ instruments: defaultInstruments() });
-      await audio.setSong(metronome(bpm));
+      await audio.setSong(click ? metronome(bpm) : { ...metronome(bpm), tracks: [] }); // no click: the engine plays nothing
       lastBar.set(-1);
       ribbon.set([]);
       rec.set(true);
       setBar(0);
-      setPhase("countIn");
-      audio.captureStart(); // before play: capture frame 0 is the first count-in click
+      setPhase(click ? "countIn" : "recording");
+      audio.captureStart(); // before play: capture frame 0 is the first count-in click (or Record, with no click)
       await audio.start(); // opens the mic (asks for permission the first time)
     } catch (e) {
       rec.set(false);
@@ -315,6 +328,7 @@ function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceM
     }
   };
   const onBar = (b: number) => {
+    if (!click) { if ((b * barFrames) / sr >= MAX_FREE_SEC) void stop(); return; }
     if (b >= TAKE_BARS + 1) void stop();
     else if (b >= 1) { setPhase("recording"); setBar(b); }
   };
@@ -325,19 +339,20 @@ function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceM
     scheduleOnRN(onBar, b);
   });
 
-  const beat = useDerivedValue(() => (rec.value && frames.value >= 0 && frames.value < barFrames ? frames.value / beatFrames : -1));
+  const beat = useDerivedValue(() => (rec.value && frames.value >= 0 && frames.value < lead ? frames.value / beatFrames : -1));
   const timer = useDerivedValue(() => {
-    if (rec.value && frames.value >= 0 && frames.value < barFrames) return `${4 - Math.floor(frames.value / beatFrames)}`;
-    const secs = rec.value && frames.value >= barFrames ? (frames.value - barFrames) / sr : 0;
+    if (rec.value && frames.value >= 0 && frames.value < lead) return `${4 - Math.floor(frames.value / beatFrames)}`;
+    const secs = rec.value && frames.value >= lead ? (frames.value - lead) / sr : 0;
     return `${Math.floor(secs / 60)}:${(secs % 60).toFixed(1).padStart(4, "0")}`;
   });
+  // the click's beat flashes the orb; with no click there's no beat to show yet, only the mic
   const breath = useDerivedValue(() => {
     if (reduceMotion) return 0;
-    if (rec.value && frames.value >= 0) return 0.6 * Math.exp((-motion.flashDecay * (frames.value % beatFrames)) / sr) + level.value;
+    if (rec.value && frames.value >= 0) return (click ? 0.6 * Math.exp((-motion.flashDecay * (frames.value % beatFrames)) / sr) : 0.25) + level.value;
     return 0.3 + 0.3 * Math.sin((2 * Math.PI * now.value) / 2.4);
   });
   const pulse = useAnimatedStyle(() => {
-    const on = !reduceMotion && recording.value;
+    const on = !reduceMotion && recording.value && click;
     const p = on ? (frames.value % beatFrames) / beatFrames : 1;
     return { opacity: on ? 0.55 * (1 - p) : 0, transform: [{ scale: 1 + 0.3 * p }] };
   });
@@ -354,7 +369,9 @@ function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceM
   const timerFade = useDerivedValue(() => (forgeT ? 1 - prog(forgeT.value, FLOW.collapse, FLOW.collapse + 0.15) : 1));
   const handedOver = forgeT ? { opacity: 0 } : null;
 
-  const label = phase === "countIn" ? "COUNT-IN" : phase === "recording" ? `RECORDING · BAR ${bar} OF ${TAKE_BARS}` : phase === "saving" ? `RECORDING · BAR ${TAKE_BARS} OF ${TAKE_BARS}` : "TAP TO RECORD";
+  const label = phase === "countIn" ? "COUNT-IN"
+    : phase === "recording" ? (click ? `RECORDING · BAR ${bar} OF ${TAKE_BARS}` : "RECORDING · TAP TO STOP")
+      : phase === "saving" ? (click ? `RECORDING · BAR ${TAKE_BARS} OF ${TAKE_BARS}` : "RECORDING") : "TAP TO RECORD";
   const busy = phase !== "idle";
   return (
     <View ref={self} style={StyleSheet.absoluteFill} pointerEvents={forgeT ? "none" : "auto"} collapsable={false}>
@@ -364,10 +381,8 @@ function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceM
         <Animated.View style={[s.chips, leave]}>
           <Chip label="Boom Bap" selected={mood === "boomBap"} onPress={() => setMood("boomBap")} disabled={busy} />
           <Chip label="Trap" selected={mood === "trap"} onPress={() => setMood("trap")} disabled={busy} />
-          <Text style={[type.stat, s.muted]}>Click {bpm} BPM</Text>
           <View style={{ flex: 1 }} />
-          <Chip label={taught ? "Kit taught ✓" : "Teach me your kit"} selected={false} onPress={() => router.push("/teach")}
-            disabled={busy} accent={color.lime} />
+          <Chip label={click ? `Click ${bpm} BPM` : "Click"} selected={click} onPress={() => setClick(!click)} disabled={busy} accent={color.cyan} />
         </Animated.View>
         <View style={s.center}>
           <View ref={orbEl} style={s.orbSlot} onLayout={measureOrb} collapsable={false} />
@@ -386,7 +401,8 @@ function RecordView({ audio, ribbon, forgeT, ribbonEl, buttonEl, onTake, reduceM
           </View>
         </View>
         <Animated.Text style={[type.body, s.hint, leave]}>
-          {error ?? (busy ? "Listening… every hit sparks." : "Beatbox the drums, then hum a bassline, in one take.")}
+          {error ?? (busy ? "Listening… every hit sparks." : click ? "Beatbox the drums, then hum a bassline, in one take, on the click."
+            : "Beatbox the drums, then hum a bassline, in one take. Any tempo: no click needed.")}
         </Animated.Text>
         {__DEV__ && ( // stays mounted while leaving: removing it shifted the layout under the forge's measurements
           <Animated.View style={leave}>

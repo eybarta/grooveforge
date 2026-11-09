@@ -13,20 +13,26 @@ export interface DetectedHit {
   features: number[];
 }
 
-/** What the engine heard in a take: the drum hits, and the hum's pitch (Hz every `f0Hop` seconds, 0 = unvoiced). */
+/**
+ * What the engine heard in a take: the drum hits, the hum's pitch (Hz every `f0Hop` seconds, 0 = unvoiced), and its
+ * beats (s) and tempo (engine/src/Beats.cpp; for a take with no click).
+ */
 export interface TakeAnalysis {
   hits: DetectedHit[];
   f0: Float32Array;
   f0Hop: number;
+  beats: number[];
+  bpm: number;
 }
 
-const MAX_HITS = 4096;
+const MAX_HITS = 4096, MAX_BEATS = 2048;
 
 /**
- * The engine's take analysis through its WASM build: HPSS + SuperFlux onsets + per-hit features. `reference` = what
- * the engine played during the take (its output capture), on the take's timeline, so the metronome bleed is removed.
+ * The engine's take analysis through its WASM build: HPSS + SuperFlux onsets + per-hit features + beats. `reference` =
+ * what the engine played during the take (its output capture), on the take's timeline, so the metronome bleed is
+ * removed. `beatCentreBpm`: the tempo the beats are expected around (the mood's), 0 = the engine's default.
  */
-export function analyzeTake(w: GfWasm, samples: Float32Array, sampleRate: number, reference?: Float32Array): TakeAnalysis {
+export function analyzeTake(w: GfWasm, samples: Float32Array, sampleRate: number, reference?: Float32Array, beatCentreBpm = 0): TakeAnalysis {
   const { ex, heap, put } = w;
   const stride = ex.gf_onset_stride() as number;
   if (stride !== 2 + HIT_FEATURES) throw new Error(`engine onset rows are ${stride} floats; this build expects ${2 + HIT_FEATURES}`);
@@ -34,20 +40,21 @@ export function analyzeTake(w: GfWasm, samples: Float32Array, sampleRate: number
   const frames = pitchFrames(samples.length);
   const px = put(samples);
   const pr = reference ? put(reference.length === samples.length ? reference : fit(reference, samples.length)) : 0;
-  const po = ex.gf_alloc(stride * MAX_HITS), pf = ex.gf_alloc(frames);
+  const po = ex.gf_alloc(stride * MAX_HITS), pf = ex.gf_alloc(frames), pb = ex.gf_alloc(MAX_BEATS), pn = ex.gf_alloc(2);
   try {
-    const count = Math.min(MAX_HITS, ex.gf_analyze(px, samples.length, sampleRate, pr, po, MAX_HITS, pf) as number);
-    return fromEngine(heap(po, stride * count), heap(pf, frames).slice(), sampleRate);
+    const count = Math.min(MAX_HITS, ex.gf_analyze(px, samples.length, sampleRate, pr, po, MAX_HITS, pf, beatCentreBpm, pb, MAX_BEATS, pn, pn + 4) as number);
+    const beatCount = Math.min(MAX_BEATS, new Int32Array(heap(pn, 2).buffer, pn, 1)[0]!);
+    return fromEngine(heap(po, stride * count), heap(pf, frames).slice(), sampleRate, Array.from(heap(pb, beatCount)), heap(pn, 2)[1]!);
   } finally {
-    for (const p of [px, pr, po, pf]) if (p) ex.gf_free(p);
+    for (const p of [px, pr, po, pf, pb, pn]) if (p) ex.gf_free(p);
   }
 }
 
 export const pitchFrames = (samples: number) => Math.floor(samples / PITCH_HOP) + 1;
 
-/** The engine's onset rows + pitch track → TakeAnalysis: shared by WASM, the web worker and JSI. */
-export const fromEngine = (rows: ArrayLike<number>, f0: Float32Array, sampleRate: number): TakeAnalysis =>
-  ({ hits: hitsFromRows(rows), f0, f0Hop: PITCH_HOP / sampleRate });
+/** The engine's onset rows + pitch track + beats → TakeAnalysis: shared by WASM, the web worker and JSI. */
+export const fromEngine = (rows: ArrayLike<number>, f0: Float32Array, sampleRate: number, beats: number[] = [], bpm = 0): TakeAnalysis =>
+  ({ hits: hitsFromRows(rows), f0, f0Hop: PITCH_HOP / sampleRate, beats, bpm });
 
 /** Onset rows [time, strength, HIT_FEATURES features] (flattened) → hits: shared by WASM, the web worker and JSI. */
 export function hitsFromRows(rows: ArrayLike<number>): DetectedHit[] {

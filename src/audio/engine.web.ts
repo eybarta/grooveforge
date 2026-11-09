@@ -89,11 +89,12 @@ async function wasmTools(bytes: ArrayBuffer): Promise<WasmTools> {
 }
 
 /** One analysis worker for the page (public/gf-analysis-worker.js), started on first use. */
-let worker: { run: (take: Float32Array, reference?: Float32Array) => Promise<{ rows: Float32Array; f0: Float32Array }> } | null = null;
+type Analysed = { rows: Float32Array; f0: Float32Array; beats: number[]; bpm: number };
+let worker: { run: (take: Float32Array, reference: Float32Array | undefined, beatCentreBpm: number) => Promise<Analysed> } | null = null;
 function analysis() {
   if (worker) return worker;
   const w = new Worker("/gf-analysis-worker.js");
-  const pending = new Map<number, { ok: (r: { rows: Float32Array; f0: Float32Array }) => void; fail: (e: Error) => void }>();
+  const pending = new Map<number, { ok: (r: Analysed) => void; fail: (e: Error) => void }>();
   let next = 0;
   w.onmessage = ({ data }) => {
     const p = pending.get(data.id);
@@ -102,10 +103,10 @@ function analysis() {
     else p?.ok(data);
   };
   worker = {
-    run: (take, reference) => new Promise((ok, fail) => {
+    run: (take, reference, beatCentreBpm) => new Promise((ok, fail) => {
       const id = next++;
       pending.set(id, { ok, fail });
-      w.postMessage({ id, take, reference, sampleRate: SAMPLE_RATE }, [take.buffer, ...(reference ? [reference.buffer] : [])]);
+      w.postMessage({ id, take, reference, sampleRate: SAMPLE_RATE, beatCentreBpm }, [take.buffer, ...(reference ? [reference.buffer] : [])]);
     }),
   };
   return worker;
@@ -216,10 +217,10 @@ export async function createAudioEngine(): Promise<AudioEngine> {
       const out = await off.startRendering();
       return [out.getChannelData(0), out.getChannelData(1)];
     },
-    async analyze(take, reference) {
+    async analyze(take, reference, beatCentreBpm = 0) {
       const ref = reference && reference.length >= take.length ? reference.slice(0, take.length) : undefined;
-      const { rows, f0 } = await analysis().run(take.slice(), ref);
-      return fromEngine(rows, f0, SAMPLE_RATE);
+      const { rows, f0, beats, bpm } = await analysis().run(take.slice(), ref, beatCentreBpm);
+      return fromEngine(rows, f0, SAMPLE_RATE, beats, bpm);
     },
     async loudness([l, r = l]) {
       tools ??= wasmTools(wasmBytes);

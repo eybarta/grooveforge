@@ -1,12 +1,12 @@
 /**
  * The hum's pitch track → 808 notes (BUILD_PLAN step 7): voiced stretches split into steady notes, the key found from
  * them and every note snapped into it, the line moved into C1–C2, and a hummed slide into a note becomes its
- * glideFrom. No hum → the 808 follows the kicks. Timing as the drums (src/analysis/takeToSong.ts).
+ * glideFrom. No hum → a bassline on the kicks (src/analysis/bassline.ts). Timing as the drums (src/analysis/takeToSong.ts).
  */
-import { boomBapDemo, trapDemo } from "@/song/demoGrooves";
 import { STEP_TICKS } from "@/song/grid";
 import { hzToMidi } from "@/song/time";
 import type { NoteEvent, Song } from "@/song/types";
+import { kickBassline } from "./bassline";
 
 /** A hummed note: seconds in the take, the pitch as hummed (fractional MIDI), whether it was slid into. */
 export interface HumNote { start: number; end: number; midi: number; slid: boolean }
@@ -165,19 +165,11 @@ export function intoRange(pitches: number[]): number[] {
 export type Place = (t: number, unit: number) => { tick: number; offsetMs: number };
 
 /**
- * The hum → the 808 track's notes, placed on the grid by `place`. Without a usable hum, the 808 plays the mood's root
- * (as its demo groove) on every kick, held to the next kick (at most two beats).
+ * The hum → the 808 track's notes, placed on the grid by `place`. Without a usable hum: a bassline on the kicks.
  */
 export function humToBass(hum: HumNote[], song: Pick<Song, "bars" | "mood">, place: Place, kicks: NoteEvent[]): NoteEvent[] {
   const end = song.bars * 16 * STEP_TICKS;
-  if (!hum.length) {
-    const demo = (song.mood === "trap" ? trapDemo() : boomBapDemo()).tracks.find((t) => t.kind === "bass")!.notes[0]!;
-    const ks = [...kicks].sort((a, b) => a.tick - b.tick);
-    return ks.map((k, i) => ({
-      id: `b${k.tick}`, tick: k.tick, lane: "bass", velocity: 1, offsetMs: k.offsetMs, source: "detected", pitch: demo.pitch,
-      durationTicks: Math.max(STEP_TICKS, Math.min((ks[i + 1]?.tick ?? end) - k.tick, 8 * STEP_TICKS)),
-    }));
-  }
+  if (!hum.length) return kickBassline(kicks, song);
   const key = detectKey(hum);
   const pitches = intoRange(hum.map((n) => snap(n.midi, key)));
   const notes: NoteEvent[] = [];

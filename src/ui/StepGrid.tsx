@@ -26,9 +26,11 @@ const AMBER = "#FFB020"; // the unsure mark (docs/design/3-studio); no pulse: id
  * `pos` (0–1 through the loop, −1 stopped): a pure function of (cells, t). Taps and screen readers use a static
  * layer of real buttons on top, ≥ 44 px tall (16 steps can't be 44 px wide on a phone).
  */
-export function StepGrid({ lanes, cells, unsure, bar, bars, loopSeconds, pos, reduceMotion, onToggle, reveal, canvasRef }: {
+export function StepGrid({ lanes, cells, unsure, bar, bars, loopSeconds, pos, reduceMotion, onToggle, onHold, reveal, canvasRef }: {
   lanes: readonly GridLane[]; cells: number[][]; unsure?: boolean[][]; bar: number; bars: number; loopSeconds: number;
   pos: SharedValue<number>; reduceMotion: boolean; onToggle: (row: number, step: number) => void;
+  /** Long-press on a hit (the Studio: "that hit is really…"). */
+  onHold?: (row: number, step: number) => void;
   reveal?: Reveal; canvasRef?: Ref<ComponentRef<typeof View>>;
 }) {
   const [w, setW] = useState(0);
@@ -111,6 +113,8 @@ export function StepGrid({ lanes, cells, unsure, bar, bars, loopSeconds, pos, re
                 const q = v > 0 && !!unsure?.[r]![step];
                 return (
                   <Pressable key={step} style={s.hit} onPress={() => onToggle(r, step)} accessibilityRole="button"
+                    onLongPress={onHold && v > 0 ? () => onHold(r, step) : undefined}
+                    accessibilityHint={onHold && v > 0 ? "Long-press to change which sound it is" : undefined}
                     accessibilityLabel={`${LANES_UI[l].name} step ${step + 1}${q ? ", unsure" : ""}`} accessibilityState={{ selected: v > 0 }}>
                     {q && <Text style={s.mark}>?</Text>}
                   </Pressable>

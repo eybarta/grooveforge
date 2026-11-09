@@ -1,31 +1,37 @@
 /**
- * A take's detected hits → the Song's drum notes (CLAUDE.md: hits keep their timing offset, quantize is a blend
- * knob). Tempo and bar 1 come from the click: the take was recorded over it, so no tempo detection is needed.
+ * A take → its Song: drum hits → drum notes, hum → the 808 (CLAUDE.md: hits keep their timing offset, quantize is a
+ * blend knob). Each hit's lane comes from the take's own sounds (src/analysis/sounds.ts: named untaught against the
+ * generic kit, or by the user's kit); its place from the beat grid (src/analysis/beatGrid.ts): the engine's beats for a
+ * take with no click, the click's otherwise, so a performance that drifts still lands on the grid.
  */
+import GENERIC_KIT from "../../assets/kits/generic-kit.json";
 import { STEP_TICKS } from "@/song/grid";
 import { emptySong } from "@/song/store";
 import { noteTimeSec } from "@/song/time";
-import type { DrumLane, NoteEvent, Song } from "@/song/types";
+import type { NoteEvent, Song } from "@/song/types";
 import type { TakeAnalysis } from "./analyze";
-import { classify, type Kit } from "./classify";
+import { beatPosition, beatsBpm, clickBeats, findBar1, loopBars } from "./beatGrid";
+import type { Kit } from "./classify";
 import { humNotes, humToBass, type Place } from "./humToBass";
+import { nameSounds, type SoundKit } from "./sounds";
 
 export interface TakeInfo {
-  bpm: number;
-  bars: Song["bars"];
   mood: Song["mood"];
-  /** Seconds before bar 1 in the (latency-aligned) take: the count-in. */
-  countInSec: number;
+  /** The take's beats (s, on the analysed take's timeline): the engine's (no click) or the click's. */
+  beats: number[];
+  /** Bar 1's beat (its index in `beats`) when known (a click take: 0); else found from the kicks and snares. */
+  bar1?: number;
+  /** The loop's length when known (a click take: the bars recorded); else the whole bars from bar 1. */
+  bars?: Song["bars"];
 }
 
-/**
- * Without a kit: a crude guess by log₁₀(energy < 300 Hz / > 3 kHz) (feature 17), always marked unsure. On the golden
- * takes kicks are 0.1…1.3, snares −1.9…−1.5, hats down to −6 (brightness, feature 13, overlaps across all three).
- * shortcut: synthetic takes only; re-fit on the real golden takes, or replace with the bundled default kit (P2 plan).
- */
-function guess(features: number[]): DrumLane {
-  const lowHigh = features[17]!;
-  return lowHigh > 0 ? "kick" : lowHigh < -3.5 ? "hatClosed" : "snare";
+export interface TakeSong {
+  song: Song;
+  /** Per sound (a note's `sound`): its hits' features, so a fix can teach the user's kit that sound. */
+  sounds: number[][][];
+  /** The beats the song was placed on (the given ones, or the mood's tempo if too few were found) and bar 1's index. */
+  beats: number[];
+  bar1: number;
 }
 
 /** Off-beat 16ths' median position inside their 8th (0.5 = straight), from hits snapped to the straight grid. */
@@ -41,13 +47,24 @@ export function estimateSwing(times: number[], sixteenth: number): number | null
 
 type Placed = NoteEvent & { strength: number };
 
-/** The take's song: drums from its hits, the 808 from its hum (src/analysis/humToBass.ts). */
-export function takeToSong(take: TakeAnalysis, kit: Kit | null, info: TakeInfo): Song {
-  const s16 = 60 / info.bpm / 4;
-  const steps = info.bars * 16;
-  const rel = take.hits.map((h) => ({ ...h, t: h.t - info.countInSec })).filter((h) => h.t > -s16 / 2 && h.t < steps * s16 - s16 / 2);
+export function takeToSong(take: TakeAnalysis, user: Kit | null, info: TakeInfo): TakeSong {
+  const named = nameSounds(take.hits.map((h) => h.features), GENERIC_KIT as SoundKit, user);
+  // no beats found (a take with a single hit, say): the mood's tempo from the first hit
+  const beats = info.beats.length >= 2 ? info.beats
+    : clickBeats(info.mood === "trap" ? 140 : 90, take.hits[0]?.t ?? 0, take.f0.length * take.f0Hop);
+  const bar1 = info.bar1 ?? findBar1(beats, take.hits.map((h, i) => ({ t: h.t, cls: named[i]!.cls })), info.mood);
+  const bpm = Math.round(beatsBpm(beats) * 10) / 10;
+  const spb = 60 / bpm, s16 = spb / 4;
+  const toGrid = (t: number) => (beatPosition(beats, t) - bar1) * spb; // seconds from bar 1 at a steady tempo
+  const lastHit = take.hits.length ? toGrid(take.hits[take.hits.length - 1]!.t) / spb : 0;
+  const bars = info.bars ?? loopBars(Math.max(beats.length - bar1, lastHit + 1) / 4 + 0.15); // a bar short by a beat still counts
+  const steps = bars * 16;
+
+  const rel = take.hits
+    .map((h, i) => ({ ...h, t: toGrid(h.t), sound: named[i]! }))
+    .filter((h) => h.t > -s16 / 2 && h.t < steps * s16 - s16 / 2);
   const swing = estimateSwing(rel.map((h) => h.t), s16) ?? (info.mood === "boomBap" ? 0.58 : 0.5);
-  const grid = { ...emptySong(), bpm: info.bpm, swing, quantize: 1 };
+  const grid = { ...emptySong(), bpm, swing, quantize: 1 };
   const at = (tick: number) => noteTimeSec({ tick, offsetMs: 0 } as NoteEvent, grid); // where the engine plays a tick
   // the nearest tick in `unit`s as the engine plays them (a tie goes to the 16th), and the feel to 0.1 ms
   const place: Place = (t, unit) => {
@@ -60,7 +77,7 @@ export function takeToSong(take: TakeAnalysis, kit: Kit | null, info: TakeInfo):
 
   // each hit → its lane and nearest 32nd
   const H = STEP_TICKS / 2;
-  const placed = rel.map((h) => ({ h, p: place(h.t, H), c: kit ? classify(h.features, kit) : { cls: guess(h.features), confidence: 0 } }));
+  const placed = rel.map((h) => ({ h, p: place(h.t, H), c: h.sound }));
   const on32 = new Set(placed.map(({ p, c }) => `${c.cls}:${p.tick}`));
 
   const drums = new Map<string, Placed>();
@@ -75,19 +92,27 @@ export function takeToSong(take: TakeAnalysis, kit: Kit | null, info: TakeInfo):
     drums.set(key, {
       id: `d${tick}-${c.cls}`, tick, lane: c.cls, source: "detected", strength: h.strength, offsetMs,
       velocity: Math.min(1, Math.max(0.2, h.strength / loud)),
-      confidence: Math.round(c.confidence * 100) / 100,
+      confidence: Math.round(c.confidence * 100) / 100, sound: c.group,
     });
   }
   const drumNotes = [...drums.values()].map(({ strength: _, ...n }) => n).sort((a, b) => a.tick - b.tick);
-  const kicks = placed.filter(({ c }) => c.cls === "kick").map(({ h }) => h.t + info.countInSec);
-  const drumsHeard = { hits: take.hits.map((h) => h.t), kicks: kicks.sort((a, b) => a - b), sixteenth: s16 };
-  const hum = humNotes(take.f0, take.f0Hop, drumsHeard).map((n) => ({ ...n, start: n.start - info.countInSec, end: n.end - info.countInSec }));
-  const bass = humToBass(hum, info, place, drumNotes.filter((n) => n.lane === "kick"));
+  const kicks = take.hits.filter((_, i) => named[i]!.cls === "kick").map((h) => h.t);
+  const hum = humNotes(take.f0, take.f0Hop, { hits: take.hits.map((h) => h.t), kicks, sixteenth: s16 })
+    .map((n) => ({ ...n, start: toGrid(n.start), end: toGrid(n.end) }));
+  const bass = humToBass(hum, { bars, mood: info.mood }, place, drumNotes.filter((n) => n.lane === "kick"));
+
+  const sounds: number[][][] = [];
+  named.forEach((n, i) => (sounds[n.group] ??= []).push(take.hits[i]!.features));
   return {
-    ...emptySong(), id: `take-${Date.now()}`, bpm: info.bpm, bars: info.bars, mood: info.mood, swing, quantize: 0.75,
-    tracks: [
-      { id: "drums", kind: "drums", name: "Drums", gainDb: 0, muted: false, frozen: false, notes: drumNotes },
-      { id: "bass", kind: "bass", name: "808", gainDb: 0, muted: false, frozen: false, notes: bass },
-    ],
+    song: {
+      ...emptySong(), id: `take-${Date.now()}`, bpm, bars, mood: info.mood, swing, quantize: 0.75,
+      tracks: [
+        { id: "drums", kind: "drums", name: "Drums", gainDb: 0, muted: false, frozen: false, notes: drumNotes },
+        { id: "bass", kind: "bass", name: "808", gainDb: 0, muted: false, frozen: false, notes: bass },
+      ],
+    },
+    sounds,
+    beats,
+    bar1,
   };
 }

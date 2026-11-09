@@ -1,3 +1,4 @@
+import { Link } from "expo-router";
 import { type ComponentRef, type ReactNode, type Ref, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { type SharedValue, useAnimatedStyle, useReducedMotion, useSharedValue } from "react-native-reanimated";
@@ -8,16 +9,18 @@ import { LOUDNESS_TARGETS } from "@/audio/master";
 import type { AudioEngine } from "@/audio/types";
 import type { useStudio } from "@/audio/useStudio";
 import { barCells, barUnsure, toggleStep } from "@/song/grid";
+import type { DrumLane } from "@/song/types";
 import { loopSeconds } from "@/song/time";
 import { Button, Chip, Glass, PlayButton } from "../controls";
 import { FLOW } from "../forge/flow";
 import { Knob } from "../Knob";
 import { spring } from "../motion";
 import { StepGrid } from "../StepGrid";
-import { color, space, type } from "../theme";
+import { color, LANES_UI, space, type } from "../theme";
 import { usePlayhead } from "../usePlayhead";
 
 export const STUDIO_LANES = ["kick", "snare", "hatClosed", "hatOpen", "perc", "bass"] as const;
+const DRUM_LANES: DrumLane[] = ["kick", "snare", "hatClosed", "hatOpen", "perc"];
 const SWING_MIN = 0.5, SWING_RANGE = 0.25; // straight … heavy swing
 const pct = (v: number) => `${Math.round(v * 100)}`;
 
@@ -37,12 +40,18 @@ export function StudioView({ st, forge, gridRef, footer }: {
   const rtlMs = useCalibration((c) => c.rtlMs);
   const route = routeName(useCalibration((c) => c.route));
   const [bar, setBar] = useState(0);
+  const [fixing, setFixing] = useState<{ row: number; step: number } | null>(null); // "that hit is really…"
   const shownBar = forge ? 0 : Math.min(bar, song.bars - 1);
   const latency = st.audio ? outputLatency(st.audio.reportedLatency(), rtlMs, st.audio.sampleRate) : null;
+  const cells = barCells(song, shownBar, STUDIO_LANES), unsure = barUnsure(song, shownBar, STUDIO_LANES);
+  const isDrum = (row: number) => STUDIO_LANES[row] !== "bass";
   const grid = {
-    lanes: STUDIO_LANES, cells: barCells(song, shownBar, STUDIO_LANES), unsure: barUnsure(song, shownBar, STUDIO_LANES), bar: shownBar, bars: song.bars, loopSeconds: loopSeconds(song),
-    reduceMotion, canvasRef: gridRef, onToggle: (row: number, step: number) => st.editSong(toggleStep(song, STUDIO_LANES[row]!, shownBar, step)),
+    lanes: STUDIO_LANES, cells, unsure, bar: shownBar, bars: song.bars, loopSeconds: loopSeconds(song), reduceMotion, canvasRef: gridRef,
+    // an amber "?" asks what it was; any other tap toggles the step
+    onToggle: (row: number, step: number) => (unsure[row]![step] ? setFixing({ row, step }) : st.editSong(toggleStep(song, STUDIO_LANES[row]!, shownBar, step))),
+    onHold: (row: number, step: number) => isDrum(row) && setFixing({ row, step }),
   };
+  const fixLane = fixing ? STUDIO_LANES[fixing.row]! : null;
 
   return (
     <ScrollView style={s.screen} scrollEnabled={!forge} pointerEvents={forge ? "none" : "auto"}
@@ -57,13 +66,24 @@ export function StudioView({ st, forge, gridRef, footer }: {
         <PlayButton playing={st.playing || st.mouth} onPress={st.toggle} disabled={!st.audio || st.busy === "calibrate"} />
       </Rise>
 
-      <Rise forge={forge} at={FLOW.chrome[1]} style={s.row}>
-        <Chip label="Boom Bap" selected={song.mood === "boomBap"} onPress={() => st.setMood("boomBap")} />
-        <Chip label="Trap" selected={song.mood === "trap"} onPress={() => st.setMood("trap")} />
-        <View style={{ flex: 1 }} />
-        {song.bars > 1 && Array.from({ length: song.bars }, (_, b) => (
-          <Chip key={b} label={`${b + 1}`} selected={b === shownBar} onPress={() => setBar(b)} accent={color.cyan} />
-        ))}
+      <Rise forge={forge} at={FLOW.chrome[1]} style={{ gap: 8 }}>
+        <View style={s.row}>
+          <Chip label="Boom Bap" selected={song.mood === "boomBap"} onPress={() => st.setMood("boomBap")} />
+          <Chip label="Trap" selected={song.mood === "trap"} onPress={() => st.setMood("trap")} />
+          <View style={{ flex: 1 }} />
+          {song.bars > 1 && Array.from({ length: song.bars }, (_, b) => (
+            <Chip key={b} label={`${b + 1}`} selected={b === shownBar} onPress={() => setBar(b)} accent={color.cyan} />
+          ))}
+        </View>
+        {st.canRetime && ( // the take's tempo or its bar 1 heard wrong: re-place it (BUILD_PLAN: half/double toggle)
+          <View style={s.row}>
+            <Chip label="Tempo ½" selected={false} onPress={() => st.retime("half")} />
+            <Chip label="Tempo ×2" selected={false} onPress={() => st.retime("double")} />
+            <View style={{ flex: 1 }} />
+            <Chip label="Bar 1 ◀" selected={false} onPress={() => st.retime(-1)} accent={color.cyan} />
+            <Chip label="Bar 1 ▶" selected={false} onPress={() => st.retime(1)} accent={color.cyan} />
+          </View>
+        )}
       </Rise>
 
       <Rise forge={forge} at={FLOW.gridIn} w={12}>
@@ -72,9 +92,20 @@ export function StudioView({ st, forge, gridRef, footer }: {
             : st.audio && latency ? <LiveGrid audio={st.audio} latencyFrames={latency.frames} {...grid} />
               : <IdleGrid {...grid} />}
         </Glass>
-        {grid.unsure.some((row) => row.some(Boolean)) && (
-          <Text style={[type.stat, s.muted]}>Amber <Text style={{ color: "#FFB020" }}>?</Text> = not sure what you played. Tap to fix.</Text>
-        )}
+        {fixing && fixLane && fixLane !== "bass" ? (
+          <Glass style={s.picker}>
+            <Text style={[type.stat, s.muted]}>That {LANES_UI[fixLane].name.toLowerCase()} is really… (every hit of that sound changes)</Text>
+            <View style={[s.row, { flexWrap: "wrap" }]}>
+              {DRUM_LANES.map((l) => (
+                <Chip key={l} label={`${LANES_UI[l].glyph} ${LANES_UI[l].name}`} selected={l === fixLane} accent={LANES_UI[l].color}
+                  onPress={() => { st.fixSound(fixLane, shownBar, fixing.step, l); setFixing(null); }} />
+              ))}
+              <Chip label="Cancel" selected={false} onPress={() => setFixing(null)} />
+            </View>
+          </Glass>
+        ) : grid.unsure.some((row) => row.some(Boolean)) ? (
+          <Text style={[type.stat, s.muted]}>Amber <Text style={{ color: "#FFB020" }}>?</Text> = not sure what you played. Tap it to fix; long-press any hit to change its sound.</Text>
+        ) : null}
       </Rise>
 
       <Rise forge={forge} at={FLOW.chrome[2]} style={{ gap: space.gap }}>
@@ -86,6 +117,7 @@ export function StudioView({ st, forge, gridRef, footer }: {
                 : `Sync not measured on ${route} yet · tap to calibrate`}
           </Text>
         </Pressable>
+        <Link href="/teach" style={[type.stat, s.muted, s.sync]} accessibilityRole="button">Tune it to your voice (optional, 20 s)</Link>
         <View style={s.knobs}>
           <Knob label="Quantize" value={song.quantize} accent={color.cyan} onChange={(v) => st.editSong({ ...song, quantize: v })} format={pct} />
           <Knob label="Swing" value={(song.swing - SWING_MIN) / SWING_RANGE} accent={color.magenta}
@@ -145,5 +177,6 @@ const s = StyleSheet.create({
   grid: { paddingVertical: 12, paddingHorizontal: 10 },
   sync: { minHeight: 44, justifyContent: "center", marginTop: -10, marginBottom: -6 },
   knobs: { flexDirection: "row", gap: space.row },
+  picker: { padding: 12, gap: 8, marginTop: 8 },
   muted: { color: color.muted, marginTop: 4 },
 });

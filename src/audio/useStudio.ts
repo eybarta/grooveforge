@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { boomBapDemo, trapDemo } from "@/song/demoGrooves";
 import { useSong } from "@/song/store";
 import { defaultInstruments } from "@/song/time";
-import { takeLoop } from "@/analysis/forgeTake";
+import { retakeSong, takeLoop } from "@/analysis/forgeTake";
+import { useKit } from "@/analysis/kit";
+import { hitAt, relabelSound } from "@/song/grid";
 import { useTake } from "./take";
-import type { Song } from "@/song/types";
+import type { DrumLane, Lane, Song } from "@/song/types";
 import { useCalibration } from "./calibration";
 import type { Mood } from "./kit";
-import { loadKit } from "./loadKit";
+import { loadKitOnce } from "./loadKit";
 import type { LoudnessTarget } from "./master";
 import { DEFAULT_KNOBS, type Knobs } from "./mix";
 import { saveWav } from "./saveWav";
@@ -39,7 +41,7 @@ export function useStudio(audio: AudioEngine | null) {
   const [playing, setPlaying] = useState(false);
   const [mouth, setMouth] = useState(false); // "Your mouth": the take itself is playing, looped
   const take = useTake((t) => t.take);
-  const rtlMs = useCalibration((c) => c.rtlMs);
+  const heard = useTake((t) => t.heard);
   const [busy, setBusy] = useState<"export" | "calibrate" | null>(null);
   const gainDb = useRef(0);
   const tuning = useRef(0);
@@ -54,7 +56,7 @@ export function useStudio(audio: AudioEngine | null) {
 
   useEffect(() => {
     if (!audio || kitReady === audio) return;
-    loadKit(audio).then((kit) => {
+    loadKitOnce(audio).then((kit) => {
       console.log("[studio]", JSON.stringify({ step: "kit loaded", platform: audio.platform, ...kit }));
       setKitReady(audio);
       if (__DEV__) Object.assign(globalThis, { __gfStudio: { a: audio, masterSong, studioProgram, DEMOS } });
@@ -93,9 +95,9 @@ export function useStudio(audio: AudioEngine | null) {
   };
 
   /** "Your mouth ⇄ Studio": swaps between the take as recorded (looped) and the Studio's render of it. */
-  const canCompare = !!take && song.id.startsWith("take-");
+  const canCompare = !!take && !!heard && song.id.startsWith("take-");
   const compare = async () => {
-    if (!ready || !take || !canCompare) return;
+    if (!ready || !take || !heard || !canCompare) return;
     await ready.stop();
     if (mouth) {
       await ready.start();
@@ -103,9 +105,33 @@ export function useStudio(audio: AudioEngine | null) {
       setPlaying(true);
       return;
     }
-    ready.playBuffer([takeLoop(take, song, ready.reportedLatency(), rtlMs)], true);
+    ready.playBuffer([takeLoop(take, heard, song)], true);
     setMouth(true);
     setPlaying(false);
+  };
+
+  /**
+   * A fix: the hit in that cell is really `to`; so is every hit of the same sound in the take, and the user's kit learns
+   * that sound (src/analysis/kit.ts), so the next take gets it right.
+   */
+  const fixSound = (lane: Lane, bar: number, step: number, to: DrumLane) => {
+    const hit = hitAt(song, lane, bar, step);
+    if (!hit) return;
+    const fixed = relabelSound(song, hit, to);
+    setSong(fixed.song);
+    const examples = fixed.sound === undefined ? undefined : heard?.sounds[fixed.sound];
+    if (examples?.length) useKit.getState().learn(to, examples);
+    log("fix", { from: hit.lane, to, sound: fixed.sound ?? null, examples: examples?.length ?? 0 });
+  };
+
+  /** The take's song at half / double the tempo, or bar 1 a beat earlier / later (re-placed from how it was heard). */
+  const canRetime = !!heard && song.id.startsWith("take-");
+  const retime = (change: "half" | "double" | -1 | 1) => {
+    if (!heard || !canRetime) return;
+    const r = retakeSong(heard, song.mood, useKit.getState().templates, change);
+    useTake.getState().setHeard(r.heard);
+    setSong({ ...r.song, id: song.id });
+    log("retime", { change, bpm: r.song.bpm, bar1: r.heard.bar1 });
   };
 
   const exportWav = async () => {
@@ -144,7 +170,7 @@ export function useStudio(audio: AudioEngine | null) {
   };
 
   return {
-    audio: ready, status, song, knobs, target, playing, mouth, busy, canCompare, compare,
+    audio: ready, status, song, knobs, target, playing, mouth, busy, canCompare, compare, fixSound, canRetime, retime,
     setMood: (m: Mood) => setSong(song.id.startsWith("take-") ? { ...song, mood: m } : DEMOS[m]()), // a take keeps its notes
     editSong: setSong,
     setKnob: (k: keyof Knobs, v: number) => setKnobs((prev) => ({ ...prev, [k]: v })),

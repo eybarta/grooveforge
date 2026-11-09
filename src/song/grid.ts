@@ -1,5 +1,5 @@
 /** The Studio step grid's view of a Song: one bar of 16ths per lane, and toggling a step back into notes. */
-import { PPQ, type Lane, type NoteEvent, type Song } from "./types";
+import { PPQ, type DrumLane, type Lane, type NoteEvent, type Song } from "./types";
 
 export const STEP_TICKS = PPQ / 4; // one 16th
 export const STEPS_PER_BAR = 16;
@@ -36,6 +36,32 @@ function eachCell(song: Song, bar: number, lanes: readonly Lane[], fn: (n: NoteE
 }
 
 const inStep = (n: NoteEvent, lane: Lane, from: number) => n.lane === lane && n.tick >= from && n.tick < from + STEP_TICKS;
+
+/** The loudest hit of `lane` starting in that step, if any. */
+export function hitAt(song: Song, lane: Lane, bar: number, step: number): NoteEvent | undefined {
+  const from = bar * BAR_TICKS + step * STEP_TICKS;
+  return song.tracks.flatMap((t) => t.notes).filter((n) => inStep(n, lane, from)).sort((a, b) => b.velocity - a.velocity)[0];
+}
+
+/**
+ * A fix: that hit is really `to`, and so is every hit of the same sound in the take that was named like it
+ * (src/analysis/sounds.ts): they all move lane, now sure (confidence 1). Two hits on one step of `to`: the louder stays.
+ * Returns the sound fixed (to teach the user's kit), if the hit had one.
+ */
+export function relabelSound(song: Song, hit: NoteEvent, to: DrumLane): { song: Song; sound?: number } {
+  const moves = (n: NoteEvent) => n === hit || (hit.sound !== undefined && n.sound === hit.sound && n.lane === hit.lane && n.source === "detected");
+  const tracks = song.tracks.map((t) => {
+    if (!t.notes.some(moves)) return t;
+    const kept = new Map<string, NoteEvent>();
+    for (const n of t.notes.map((n) => (moves(n) ? { ...n, lane: to, id: `d${n.tick}-${to}`, confidence: 1 } : n))) {
+      const key = n.lane === "bass" || n.lane === "melody" ? n.id : `${n.lane}:${n.tick}`;
+      const prev = kept.get(key);
+      if (!prev || n.velocity > prev.velocity) kept.set(key, n);
+    }
+    return { ...t, notes: [...kept.values()].sort((a, b) => a.tick - b.tick) };
+  });
+  return { song: { ...song, tracks }, sound: hit.sound };
+}
 
 /**
  * Turns a step off (removes every note of that lane starting inside it) or on (a user note on the 16th). A new 808

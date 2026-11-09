@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { kickBassline } from "./bassline";
 import { STEP_TICKS } from "@/song/grid";
 import { midiToHz } from "@/song/time";
 import type { NoteEvent } from "@/song/types";
@@ -77,9 +78,9 @@ describe("hum → notes", () => {
     expect(notes[2]!.offsetMs).toBe(-10);
   });
 
-  it("without a hum, the 808 plays the mood's root on the kicks", () => {
+  it("without a hum, the 808 plays a bassline on the kicks (src/analysis/bassline.ts)", () => {
     const kick = (step: number): NoteEvent => ({ id: `k${step}`, tick: step * STEP_TICKS, lane: "kick", velocity: 1, offsetMs: 3, source: "detected" });
-    const notes = humToBass([], { bars: 2, mood: "boomBap" }, place, [kick(0), kick(10), kick(16)]);
-    expect(notes.map((n) => [n.tick / STEP_TICKS, n.pitch, n.durationTicks! / STEP_TICKS, n.offsetMs])).toEqual([[0, 29, 8, 3], [10, 29, 6, 3], [16, 29, 8, 3]]);
+    const kicks = [kick(0), kick(10), kick(16)];
+    expect(humToBass([], { bars: 2, mood: "boomBap" }, place, kicks)).toEqual(kickBassline(kicks, { bars: 2, mood: "boomBap" }));
   });
 });

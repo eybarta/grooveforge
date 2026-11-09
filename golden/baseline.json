@@ -8,12 +8,18 @@
   "timingP95Ms": 5.314,
   "songRecall": 0.881,
   "humF1": 1,
+  "untaught": 0.486,
+  "afterTaps": 0.973,
+  "tapsPerTake": 1.5,
   "perTake": {
     "synthetic-boombap-90": {
       "precision": 1,
       "recall": 0.889,
       "onsetF1": 0.941,
       "classAccuracy": 1,
+      "untaught": 0.625,
+      "afterTaps": 1,
+      "tapsPerTake": 1,
       "timingMs": 0.683,
       "timingP95Ms": 4.033,
       "songRecall": 0.889
@@ -23,6 +29,9 @@
       "recall": 0.875,
       "onsetF1": 0.933,
       "classAccuracy": 1,
+      "untaught": 0.381,
+      "afterTaps": 0.952,
+      "tapsPerTake": 2,
       "humF1": 1,
       "timingMs": 0.962,
       "timingP95Ms": 5.314,

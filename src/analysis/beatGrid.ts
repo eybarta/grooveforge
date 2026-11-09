@@ -4,6 +4,12 @@
  */
 import type { DrumLane, Song } from "@/song/types";
 
+/** The loop length for a take: the most whole bars recorded, as 2, 4 or 8 (a take stopped early still makes 2). */
+export function loopBars(recordedBars: number): Song["bars"] {
+  const full = Math.floor(recordedBars + 0.1);
+  return full >= 8 ? 8 : full >= 4 ? 4 : 2;
+}
+
 /** Beats of a click take: one every 60 / bpm s from bar 1 (the count-in's end) to the end of the take. */
 export function clickBeats(bpm: number, bar1Sec: number, durationSec: number): number[] {
   const spb = 60 / bpm;
@@ -17,6 +23,22 @@ export function beatPosition(beats: number[], t: number): number {
   let k = 0;
   while (k < n - 2 && t >= beats[k + 1]!) k++; // shortcut: linear scan, a take has at most a few hundred beats
   return k + (t - beats[k]!) / (beats[k + 1]! - beats[k]!);
+}
+
+/** Beat k's time (s); outside the beats, extrapolated at the edge spacing (the inverse of beatPosition). */
+export function beatTime(beats: number[], k: number): number {
+  const n = beats.length;
+  if (k >= 0 && k < n) return beats[k]!;
+  const [a, b] = k < 0 ? [0, 1] : [n - 2, n - 1];
+  return beats[a]! + (k - a) * (beats[b]! - beats[a]!);
+}
+
+/** The beats at half or double the tempo, or bar 1 a beat earlier / later (the Studio's tempo and bar 1 fixes). */
+export function retimeBeats(beats: number[], bar1: number, change: "half" | "double" | -1 | 1): { beats: number[]; bar1: number } {
+  if (change === "half") return { beats: beats.filter((_, i) => (i - bar1) % 2 === 0), bar1: Math.floor(bar1 / 2) };
+  if (change === "double") return { beats: beats.flatMap((b, i) => (i + 1 < beats.length ? [b, (b + beats[i + 1]!) / 2] : [b])), bar1: 2 * bar1 };
+  if (bar1 + change >= 0) return { beats, bar1: bar1 + change };
+  return { beats: [beatTime(beats, -1), ...beats], bar1: 0 }; // before the first beat: one more, a beat earlier
 }
 
 /** The tempo of the beats: their median spacing. */

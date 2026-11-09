@@ -6,17 +6,24 @@ import type { TakeAnalysis } from "@/analysis/analyze";
 import type { Kit } from "@/analysis/classify";
 import { addScores, matchHits, parseTakeLabels, scoreHits, scoreHum, summarizeScore, type HitScore, type TakeLabels } from "@/analysis/golden";
 import { humNotes } from "@/analysis/humToBass";
+import { clickBeats } from "@/analysis/beatGrid";
+import { nameSounds, type SoundKit } from "@/analysis/sounds";
 import { takeToSong } from "@/analysis/takeToSong";
+import GENERIC_KIT from "../assets/kits/generic-kit.json";
 import { noteTimeSec } from "@/song/time";
 import type { DrumLane } from "@/song/types";
-import { analyze, classifyHits, DETECTOR, goldenKits } from "./detect.ts";
+import { analyze, classifyHits, DETECTOR, goldenKits, scoreSounds } from "./detect.ts";
 
 const DIR = new URL("./takes/", import.meta.url);
 const BASELINE = new URL("./baseline.json", import.meta.url);
 const SLACK = 0.005; // a drop larger than this fails CI
 const r3 = (x: number) => Math.round(x * 1000) / 1000;
 
-type Scores = ReturnType<typeof summarizeScore> & { timingMs?: number; timingP95Ms?: number; songRecall?: number; humF1?: number };
+type Scores = ReturnType<typeof summarizeScore> & {
+  timingMs?: number; timingP95Ms?: number; songRecall?: number; humF1?: number;
+  /** Untaught (the generic kit, src/analysis/sounds.ts): as named, and after one tap per wrongly named sound. */
+  untaught?: number; afterTaps?: number; tapsPerTake?: number;
+};
 const f1 = ({ tp, fp, fn }: { tp: number; fp: number; fn: number }) => (tp + fp + fn ? (2 * tp) / (2 * tp + fp + fn) : undefined);
 
 /**
@@ -25,11 +32,11 @@ const f1 = ({ tp, fp, fn }: { tp: number; fp: number; fn: number }) => (tp + fp 
  * grid, so at any knob setting q the error is (1 − q) × this: quantize 0 is the worst case.
  * songRecall: the share of labelled hits that are still a note in the song (rolls, dedupe).
  */
-function timing(labels: TakeLabels, take: TakeAnalysis, kit: Kit) {
+function timing(labels: TakeLabels, take: TakeAnalysis, kit: Kit, durationSec: number) {
   const c = labels.countInSec!, s16 = 60 / labels.bpm! / 4;
   const last = Math.max(...labels.hits.map((h) => h.t)) - c;
   const bars = ([2, 4, 8] as const).find((b) => b * 16 * s16 > last + s16 / 2) ?? 8;
-  const song = takeToSong(take, kit, { bpm: labels.bpm!, bars, mood: "boomBap", countInSec: c });
+  const { song } = takeToSong(take, kit, { mood: "boomBap", beats: clickBeats(labels.bpm!, c, durationSec), bar1: 0, bars });
   const feel = { ...song, quantize: 0 };
   const played = song.tracks[0]!.notes.map((n) => ({ t: c + noteTimeSec(n, feel), class: n.lane as DrumLane })); // a drum track
   const pairs = matchHits(labels.hits, played).pairs;
@@ -46,6 +53,7 @@ describe("golden takes", () => {
   let total: HitScore = { tp: 0, fp: 0, fn: 0, classCorrect: 0 };
   const errMs: number[] = [];
   let kept = 0, labelled = 0;
+  const sounds = { matched: 0, named: 0, fixed: 0, taps: 0, takes: 0 };
   const hum = { tp: 0, fp: 0, fn: 0 }; // hum notes (src/analysis/humToBass.ts humNotes) vs labelled hum: reported, not a gate
 
   it.each(names)("%s: labels are valid and the take scores", (name) => {
@@ -60,12 +68,15 @@ describe("golden takes", () => {
     const s = scoreHits(labels.hits, heard);
     total = addScores(total, s);
     perTake[name] = summarizeScore(s);
+    const u = scoreSounds(labels.hits, take.hits, nameSounds(take.hits.map((h) => h.features), GENERIC_KIT as SoundKit));
+    sounds.matched += u.matched; sounds.named += u.named; sounds.fixed += u.fixed; sounds.taps += u.taps; sounds.takes++;
+    perTake[name] = { ...perTake[name]!, untaught: u.named / u.matched, afterTaps: u.fixed / u.matched, tapsPerTake: u.taps };
     const drums = { hits: heard.map((x) => x.t), kicks: heard.filter((x) => x.class === "kick").map((x) => x.t), ...(labels.bpm ? { sixteenth: 15 / labels.bpm } : {}) };
     const h = scoreHum(labels.hum, humNotes(take.f0, take.f0Hop, drums));
     hum.tp += h.tp; hum.fp += h.fp; hum.fn += h.fn;
     perTake[name] = { ...perTake[name]!, humF1: f1(h) };
     if (labels.bpm && labels.countInSec !== undefined) {
-      const t = timing(labels, take, kit!);
+      const t = timing(labels, take, kit!, samples.length / sampleRate);
       errMs.push(...t.errMs);
       kept += t.songRecall * labels.hits.length;
       labelled += labels.hits.length;
@@ -74,7 +85,10 @@ describe("golden takes", () => {
   });
 
   it("does not regress below golden/baseline.json", () => {
-    const now = { ...summarizeScore(total), timingMs: mean(errMs), timingP95Ms: p95(errMs), songRecall: kept / labelled, humF1: f1(hum), perTake };
+    const now = {
+      ...summarizeScore(total), timingMs: mean(errMs), timingP95Ms: p95(errMs), songRecall: kept / labelled, humF1: f1(hum),
+      untaught: sounds.named / sounds.matched, afterTaps: sounds.fixed / sounds.matched, tapsPerTake: sounds.taps / sounds.takes, perTake,
+    };
     const rounded = JSON.parse(JSON.stringify(now, (_, v) => (typeof v === "number" ? r3(v) : v)));
     console.table({ total: rounded.onsetF1 !== undefined ? { onsetF1: rounded.onsetF1, classAccuracy: rounded.classAccuracy, timingMs: rounded.timingMs, songRecall: rounded.songRecall } : {}, ...Object.fromEntries(Object.entries(rounded.perTake as Record<string, Scores>).map(([k, v]) => [k, { onsetF1: v.onsetF1, classAccuracy: v.classAccuracy, timingMs: v.timingMs, songRecall: v.songRecall }])) });
 
@@ -88,5 +102,7 @@ describe("golden takes", () => {
     if (base.timingMs !== undefined) expect(now.timingMs).toBeLessThanOrEqual(base.timingMs + 0.5); // ms
     if (base.songRecall !== undefined) expect(now.songRecall).toBeGreaterThanOrEqual(base.songRecall - SLACK);
     if (base.humF1 !== undefined) expect(now.humF1).toBeGreaterThanOrEqual(base.humF1 - SLACK);
+    if (base.untaught !== undefined) expect(now.untaught).toBeGreaterThanOrEqual(base.untaught - SLACK);
+    if (base.afterTaps !== undefined) expect(now.afterTaps).toBeGreaterThanOrEqual(base.afterTaps - SLACK);
   });
 });
